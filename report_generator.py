@@ -11,8 +11,9 @@ from datetime import datetime
 from pathlib import Path
 
 from docx import Document
-from docx.shared import Inches, Pt, RGBColor
+from docx.shared import Inches, Pt, RGBColor, Twips, Cm
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 
@@ -45,111 +46,188 @@ INDICATOR_COLOUR_MAP = {
     'Professional Readiness': 'magenta', 'Team Readiness': 'green'
 }
 
+# Column widths for 5-column item tables (in inches) - matching sample
+COL_WIDTHS_5 = [0.28, 4.05, 1.04, 0.83, 1.04]
+
 
 class ReportGenerator:
     def __init__(self, db):
         self.db = db
         self.theme_extractor = ThemeExtractor()
     
+    def _find_logo_path(self):
+        """Find the logo file in various possible locations."""
+        possible_paths = [
+            Path(__file__).parent / 'assets' / 'cencora_logo.png',
+            Path('/mount/src/cencora-readiness/assets/cencora_logo.png'),
+            Path('assets/cencora_logo.png'),
+            Path('./assets/cencora_logo.png'),
+        ]
+        for path in possible_paths:
+            if path.exists():
+                return path
+        return None
+    
     def _create_radar_chart(self, scores: dict, output_path: str):
+        """Create a 4-axis radar chart with proper sizing and labels."""
         indicators = list(INDICATORS.keys())
         values = [scores.get(ind, 0) for ind in indicators]
-        fig, ax = plt.subplots(figsize=(5.5, 5.5), subplot_kw=dict(polar=True))
+        
+        # Larger figure to prevent cropping
+        fig = plt.figure(figsize=(8, 8))
+        ax = fig.add_subplot(111, polar=True)
         fig.patch.set_facecolor('white')
+        
+        # Angles - start from top, go clockwise
         angles = np.array([-np.pi/2, 0, np.pi/2, np.pi])
         values_closed = values + [values[0]]
         angles_closed = np.append(angles, angles[0])
+        
+        # Grid
         ax.set_ylim(0, 6)
         ax.set_yticks([1, 2, 3, 4, 5, 6])
-        ax.set_yticklabels(['1', '2', '3', '4', '5', '6'], fontsize=8, color='#888888')
+        ax.set_yticklabels(['1', '2', '3', '4', '5', '6'], fontsize=10, color='#888888')
         ax.yaxis.grid(True, color='#E0E0E0', linewidth=1)
-        ax.fill(angles_closed, values_closed, color=COLOURS_HEX['purple'], alpha=0.2)
+        
+        # Data polygon
+        ax.fill(angles_closed, values_closed, color=COLOURS_HEX['purple'], alpha=0.25)
         ax.plot(angles_closed, values_closed, color=COLOURS_HEX['purple'], linewidth=3)
-        indicator_colours = [COLOURS_HEX['purple'], COLOURS_HEX['cyan'], COLOURS_HEX['magenta'], COLOURS_HEX['green']]
+        
+        # Data points with indicator colours
+        indicator_colours = [COLOURS_HEX['purple'], COLOURS_HEX['cyan'], 
+                           COLOURS_HEX['magenta'], COLOURS_HEX['green']]
         for angle, value, colour in zip(angles, values, indicator_colours):
-            ax.scatter(angle, value, color=colour, s=150, zorder=5, edgecolors='white', linewidths=2)
+            ax.scatter(angle, value, color=colour, s=200, zorder=5, edgecolors='white', linewidths=2)
+        
+        # Remove default labels
         ax.set_xticks(angles)
         ax.set_xticklabels([])
+        
+        # Add custom labels with larger font, positioned further out
+        label_distance = 7.8
         for i, (ind, colour) in enumerate(zip(indicators, indicator_colours)):
             angle = angles[i]
-            va = ['bottom', 'center', 'top', 'center'][i]
-            ha = ['center', 'left', 'center', 'right'][i]
-            ax.text(angle, 7.5, ind, ha=ha, va=va, fontsize=11, fontweight='bold', color=colour)
+            if i == 0:  # Top
+                ax.text(angle, label_distance, ind, ha='center', va='bottom', 
+                       fontsize=13, fontweight='bold', color=colour)
+            elif i == 1:  # Right
+                ax.text(angle, label_distance, ind, ha='left', va='center',
+                       fontsize=13, fontweight='bold', color=colour)
+            elif i == 2:  # Bottom
+                ax.text(angle, label_distance, ind, ha='center', va='top',
+                       fontsize=13, fontweight='bold', color=colour)
+            else:  # Left
+                ax.text(angle, label_distance, ind, ha='right', va='center',
+                       fontsize=13, fontweight='bold', color=colour)
+        
         ax.spines['polar'].set_visible(False)
-        plt.tight_layout()
-        plt.savefig(output_path, dpi=150, bbox_inches='tight', facecolor='white')
+        
+        # Save with extra padding to prevent cropping
+        plt.savefig(output_path, dpi=150, bbox_inches='tight', facecolor='white',
+                   edgecolor='none', pad_inches=0.5)
         plt.close()
     
     def _create_comparison_radar_chart(self, pre_scores: dict, post_scores: dict, output_path: str):
+        """Create a comparison radar chart (pre dashed grey, post solid green)."""
         indicators = list(INDICATORS.keys())
         pre_values = [pre_scores.get(ind, 0) for ind in indicators]
         post_values = [post_scores.get(ind, 0) for ind in indicators]
-        fig, ax = plt.subplots(figsize=(5.5, 5.5), subplot_kw=dict(polar=True))
+        
+        fig = plt.figure(figsize=(8, 8))
+        ax = fig.add_subplot(111, polar=True)
         fig.patch.set_facecolor('white')
+        
         angles = np.array([-np.pi/2, 0, np.pi/2, np.pi])
         pre_closed = pre_values + [pre_values[0]]
         post_closed = post_values + [post_values[0]]
         angles_closed = np.append(angles, angles[0])
+        
         ax.set_ylim(0, 6)
         ax.set_yticks([1, 2, 3, 4, 5, 6])
-        ax.set_yticklabels(['1', '2', '3', '4', '5', '6'], fontsize=8, color='#888888')
+        ax.set_yticklabels(['1', '2', '3', '4', '5', '6'], fontsize=10, color='#888888')
         ax.yaxis.grid(True, color='#E0E0E0', linewidth=1)
+        
+        # PRE polygon (dashed, grey)
         ax.fill(angles_closed, pre_closed, color='#999999', alpha=0.1)
         ax.plot(angles_closed, pre_closed, color='#999999', linewidth=2, linestyle='--')
-        ax.fill(angles_closed, post_closed, color=COLOURS_HEX['green'], alpha=0.2)
+        
+        # POST polygon (solid, green)
+        ax.fill(angles_closed, post_closed, color=COLOURS_HEX['green'], alpha=0.25)
         ax.plot(angles_closed, post_closed, color=COLOURS_HEX['green'], linewidth=3)
-        indicator_colours = [COLOURS_HEX['purple'], COLOURS_HEX['cyan'], COLOURS_HEX['magenta'], COLOURS_HEX['green']]
+        
+        indicator_colours = [COLOURS_HEX['purple'], COLOURS_HEX['cyan'], 
+                           COLOURS_HEX['magenta'], COLOURS_HEX['green']]
         for angle, pre_val, post_val, colour in zip(angles, pre_values, post_values, indicator_colours):
-            ax.scatter(angle, pre_val, color='#999999', s=60, zorder=4, edgecolors='white', linewidths=1)
-            ax.scatter(angle, post_val, color=colour, s=150, zorder=5, edgecolors='white', linewidths=2)
+            ax.scatter(angle, pre_val, color='#999999', s=80, zorder=4, edgecolors='white', linewidths=1)
+            ax.scatter(angle, post_val, color=colour, s=200, zorder=5, edgecolors='white', linewidths=2)
+        
         ax.set_xticks(angles)
         ax.set_xticklabels([])
+        
+        label_distance = 7.8
         for i, (ind, colour) in enumerate(zip(indicators, indicator_colours)):
             angle = angles[i]
-            va = ['bottom', 'center', 'top', 'center'][i]
-            ha = ['center', 'left', 'center', 'right'][i]
-            ax.text(angle, 7.5, ind, ha=ha, va=va, fontsize=11, fontweight='bold', color=colour)
+            if i == 0:
+                ax.text(angle, label_distance, ind, ha='center', va='bottom',
+                       fontsize=13, fontweight='bold', color=colour)
+            elif i == 1:
+                ax.text(angle, label_distance, ind, ha='left', va='center',
+                       fontsize=13, fontweight='bold', color=colour)
+            elif i == 2:
+                ax.text(angle, label_distance, ind, ha='center', va='top',
+                       fontsize=13, fontweight='bold', color=colour)
+            else:
+                ax.text(angle, label_distance, ind, ha='right', va='center',
+                       fontsize=13, fontweight='bold', color=colour)
+        
+        # Legend
         from matplotlib.lines import Line2D
         legend_elements = [
             Line2D([0], [0], color='#999999', linestyle='--', linewidth=2, label='Pre-Programme'),
             Line2D([0], [0], color=COLOURS_HEX['green'], linewidth=3, label='Post-Programme')
         ]
-        ax.legend(handles=legend_elements, loc='lower left', bbox_to_anchor=(-0.1, -0.15), fontsize=9, frameon=False)
+        ax.legend(handles=legend_elements, loc='lower left', bbox_to_anchor=(-0.15, -0.15),
+                 fontsize=11, frameon=False)
+        
         ax.spines['polar'].set_visible(False)
-        plt.tight_layout()
-        plt.savefig(output_path, dpi=150, bbox_inches='tight', facecolor='white')
+        plt.savefig(output_path, dpi=150, bbox_inches='tight', facecolor='white',
+                   edgecolor='none', pad_inches=0.5)
         plt.close()
     
     def _create_bar_chart(self, score: float, colour_hex: str, output_path: str):
-        fig, ax = plt.subplots(figsize=(1.5, 0.25))
+        """Create a horizontal bar chart for a single score."""
+        fig, ax = plt.subplots(figsize=(1.2, 0.3))
         fig.patch.set_facecolor('white')
-        ax.barh(0, 6, color='#E8E8E8', height=0.8)
-        ax.barh(0, score, color=colour_hex, height=0.8)
+        ax.barh(0, 6, color='#E8E8E8', height=0.6)
+        ax.barh(0, score, color=colour_hex, height=0.6)
         ax.set_xlim(0, 6)
         ax.set_ylim(-0.5, 0.5)
         ax.axis('off')
-        plt.savefig(output_path, dpi=100, bbox_inches='tight', facecolor='white', pad_inches=0.02)
+        plt.savefig(output_path, dpi=100, bbox_inches='tight', facecolor='white', pad_inches=0.01)
         plt.close()
     
     def _create_comparison_bar_chart(self, pre_score: float, post_score: float, colour_hex: str, output_path: str):
-        fig, ax = plt.subplots(figsize=(1.5, 0.25))
+        """Create a comparison bar (pre dashed outline, post filled)."""
+        fig, ax = plt.subplots(figsize=(1.2, 0.3))
         fig.patch.set_facecolor('white')
-        ax.barh(0, 6, color='#E8E8E8', height=0.8)
-        ax.barh(0, post_score, color=colour_hex, height=0.8)
-        ax.barh(0, pre_score, color='none', edgecolor='#888888', linewidth=2, linestyle='--', height=0.8)
+        ax.barh(0, 6, color='#E8E8E8', height=0.6)
+        ax.barh(0, post_score, color=colour_hex, height=0.6)
+        ax.barh(0, pre_score, color='none', edgecolor='#666666', linewidth=1.5, linestyle='--', height=0.6)
         ax.set_xlim(0, 6)
         ax.set_ylim(-0.5, 0.5)
         ax.axis('off')
-        plt.savefig(output_path, dpi=100, bbox_inches='tight', facecolor='white', pad_inches=0.02)
+        plt.savefig(output_path, dpi=100, bbox_inches='tight', facecolor='white', pad_inches=0.01)
         plt.close()
     
     def _set_cell_shading(self, cell, colour_hex: str):
+        """Set cell background colour."""
         colour_hex = colour_hex.replace('#', '')
         shading = OxmlElement('w:shd')
         shading.set(qn('w:fill'), colour_hex)
         cell._tc.get_or_add_tcPr().append(shading)
     
-    def _set_cell_margins(self, cell, top=60, bottom=60, left=100, right=100):
+    def _set_cell_margins(self, cell, top=40, bottom=40, left=80, right=80):
+        """Set cell margins in twips."""
         tc = cell._tc
         tcPr = tc.get_or_add_tcPr()
         tcMar = OxmlElement('w:tcMar')
@@ -160,20 +238,14 @@ class ReportGenerator:
             tcMar.append(node)
         tcPr.append(tcMar)
     
+    def _set_column_width(self, column, width_inches):
+        """Set column width."""
+        for cell in column.cells:
+            cell.width = Inches(width_inches)
+    
     def _add_logo_header(self, doc):
-        # Try multiple possible logo paths
-        possible_paths = [
-            Path(__file__).parent / 'assets' / 'cencora_logo.png',
-            Path('/mount/src/cencora-readiness/assets/cencora_logo.png'),
-            Path('assets/cencora_logo.png'),
-        ]
-        
-        logo_path = None
-        for path in possible_paths:
-            if path.exists():
-                logo_path = path
-                break
-        
+        """Add Cencora logo to document header."""
+        logo_path = self._find_logo_path()
         if logo_path:
             try:
                 section = doc.sections[0]
@@ -181,48 +253,146 @@ class ReportGenerator:
                 header_para = header.paragraphs[0] if header.paragraphs else header.add_paragraph()
                 header_para.alignment = WD_ALIGN_PARAGRAPH.RIGHT
                 run = header_para.add_run()
-                run.add_picture(str(logo_path), width=Inches(1.0))
-            except Exception:
-                pass  # Skip logo if it fails
+                run.add_picture(str(logo_path), width=Inches(1.2))
+            except Exception as e:
+                print(f"Logo error: {e}")
     
-    def _create_styled_table(self, doc, headers, header_colour_hex='461E96'):
-        table = doc.add_table(rows=1, cols=len(headers))
+    def _create_info_table(self, doc, rows_data):
+        """Create the participant info table."""
+        table = doc.add_table(rows=len(rows_data), cols=2)
         table.style = 'Table Grid'
-        for i, header_text in enumerate(headers):
-            cell = table.rows[0].cells[i]
-            cell.text = header_text
-            self._set_cell_shading(cell, header_colour_hex)
+        
+        for i, (label, value) in enumerate(rows_data):
+            table.rows[i].cells[0].text = label
+            table.rows[i].cells[1].text = str(value)
+            self._set_cell_shading(table.rows[i].cells[0], 'F5F5F5')
+            self._set_cell_margins(table.rows[i].cells[0])
+            self._set_cell_margins(table.rows[i].cells[1])
+            
+            # Set column widths
+            table.rows[i].cells[0].width = Inches(1.45)
+            table.rows[i].cells[1].width = Inches(4.85)
+            
+            for cell in table.rows[i].cells:
+                for para in cell.paragraphs:
+                    for run in para.runs:
+                        run.font.size = Pt(10)
+                        run.font.name = 'Arial'
+                        if cell == table.rows[i].cells[0]:
+                            run.bold = True
+        return table
+    
+    def _create_summary_table(self, doc, indicator_scores, overall_score):
+        """Create the summary indicator/score table."""
+        table = doc.add_table(rows=1, cols=2)
+        table.style = 'Table Grid'
+        
+        # Header row
+        table.rows[0].cells[0].text = "Indicator"
+        table.rows[0].cells[1].text = "Score"
+        for cell in table.rows[0].cells:
+            self._set_cell_shading(cell, '461E96')
             self._set_cell_margins(cell)
             for para in cell.paragraphs:
                 para.alignment = WD_ALIGN_PARAGRAPH.CENTER
                 for run in para.runs:
                     run.font.bold = True
                     run.font.color.rgb = COLOURS_RGB['white']
-                    run.font.size = Pt(9)
+                    run.font.size = Pt(10)
                     run.font.name = 'Arial'
+        
+        # Set column widths
+        table.rows[0].cells[0].width = Inches(5.85)
+        table.rows[0].cells[1].width = Inches(1.39)
+        
+        # Data rows
+        for i, (ind, score) in enumerate(indicator_scores.items()):
+            row = table.add_row()
+            row.cells[0].text = ind
+            row.cells[1].text = f"{score:.1f}"
+            bg = 'FFFFFF' if i % 2 == 0 else 'FDF6E3'
+            for j, cell in enumerate(row.cells):
+                self._set_cell_shading(cell, bg)
+                self._set_cell_margins(cell)
+                cell.width = Inches(5.85) if j == 0 else Inches(1.39)
+                for para in cell.paragraphs:
+                    para.alignment = WD_ALIGN_PARAGRAPH.CENTER if j == 1 else WD_ALIGN_PARAGRAPH.LEFT
+                    for run in para.runs:
+                        run.font.size = Pt(10)
+                        run.font.name = 'Arial'
+        
+        # Overall row
+        row = table.add_row()
+        row.cells[0].text = "OVERALL"
+        row.cells[1].text = f"{overall_score:.1f}"
+        for j, cell in enumerate(row.cells):
+            self._set_cell_shading(cell, 'F5F5F5')
+            self._set_cell_margins(cell)
+            cell.width = Inches(5.85) if j == 0 else Inches(1.39)
+            for para in cell.paragraphs:
+                para.alignment = WD_ALIGN_PARAGRAPH.CENTER if j == 1 else WD_ALIGN_PARAGRAPH.LEFT
+                for run in para.runs:
+                    run.bold = True
+                    run.font.size = Pt(10)
+                    run.font.name = 'Arial'
+        
         return table
     
-    def _add_table_row(self, table, values, row_index, alignments=None, bar_image_path=None, bar_col=None):
-        row = table.add_row()
-        bg_colour = 'FFFFFF' if row_index % 2 == 0 else 'FDF6E3'
-        for i, value in enumerate(values):
-            cell = row.cells[i]
-            if bar_image_path and i == bar_col:
-                para = cell.paragraphs[0]
+    def _create_items_table(self, doc, indicator, start, end, ratings, colour_hex):
+        """Create a detailed items table for an indicator."""
+        table = doc.add_table(rows=1, cols=5)
+        table.style = 'Table Grid'
+        
+        # Header
+        headers = ["#", "Statement", "Focus", "", "Score"]
+        for i, h in enumerate(headers):
+            table.rows[0].cells[i].text = h
+            self._set_cell_shading(table.rows[0].cells[i], colour_hex.replace('#', ''))
+            self._set_cell_margins(table.rows[0].cells[i])
+            table.rows[0].cells[i].width = Inches(COL_WIDTHS_5[i])
+            for para in table.rows[0].cells[i].paragraphs:
                 para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                run = para.add_run()
-                run.add_picture(bar_image_path, width=Inches(0.8))
-            else:
-                cell.text = str(value) if value is not None else ''
-                for para in cell.paragraphs:
-                    if alignments and i < len(alignments):
-                        para.alignment = alignments[i]
-                    for run in para.runs:
-                        run.font.size = Pt(9)
-                        run.font.name = 'Arial'
-            self._set_cell_shading(cell, bg_colour)
-            self._set_cell_margins(cell)
-        return row
+                for run in para.runs:
+                    run.font.bold = True
+                    run.font.color.rgb = COLOURS_RGB['white']
+                    run.font.size = Pt(9)
+                    run.font.name = 'Arial'
+        
+        # Data rows
+        for idx, item_num in enumerate(range(start, end + 1)):
+            item = ITEMS[item_num]
+            score = ratings.get(item_num, 0)
+            row = table.add_row()
+            bg = 'FFFFFF' if idx % 2 == 0 else 'FDF6E3'
+            
+            # Create bar chart
+            with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
+                self._create_bar_chart(score, colour_hex, tmp.name)
+                bar_path = tmp.name
+            
+            values = [str(item_num), item['text'], item['focus'], None, str(score)]
+            alignments = [WD_ALIGN_PARAGRAPH.CENTER, WD_ALIGN_PARAGRAPH.LEFT, 
+                         WD_ALIGN_PARAGRAPH.CENTER, WD_ALIGN_PARAGRAPH.CENTER, WD_ALIGN_PARAGRAPH.CENTER]
+            
+            for j, cell in enumerate(row.cells):
+                cell.width = Inches(COL_WIDTHS_5[j])
+                self._set_cell_shading(cell, bg)
+                self._set_cell_margins(cell)
+                
+                if j == 3:  # Bar chart column
+                    para = cell.paragraphs[0]
+                    para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                    run = para.add_run()
+                    run.add_picture(bar_path, width=Inches(0.7))
+                else:
+                    cell.text = str(values[j]) if values[j] is not None else ''
+                    for para in cell.paragraphs:
+                        para.alignment = alignments[j]
+                        for run in para.runs:
+                            run.font.size = Pt(9)
+                            run.font.name = 'Arial'
+        
+        return table
     
     def _calculate_indicator_scores(self, ratings):
         scores = {}
@@ -238,14 +408,17 @@ class ReportGenerator:
         return sum(valid_ratings) / len(valid_ratings) if valid_ratings else 0
     
     def generate_baseline_report(self, participant_id):
+        """Generate a Baseline report (PRE assessment only)."""
         data = self.db.get_participant_data(participant_id)
         if not data or not data['pre']:
             raise ValueError("No PRE assessment data found")
+        
         participant = data['participant']
         cohort = data['cohort']
         pre_ratings = data['pre']['ratings']
         pre_responses = data['pre']['open_responses']
         pre_date = data['pre']['assessment'].get('completed_at', '')[:10]
+        
         indicator_scores = self._calculate_indicator_scores(pre_ratings)
         overall_score = self._calculate_overall_score(pre_ratings)
         
@@ -253,162 +426,172 @@ class ReportGenerator:
         style = doc.styles['Normal']
         style.font.name = 'Arial'
         style.font.size = Pt(10)
+        
+        # Add logo
         self._add_logo_header(doc)
         
+        # Title
         title = doc.add_paragraph()
         run = title.add_run("THE READINESS FRAMEWORK")
         run.bold = True
-        run.font.size = Pt(14)
+        run.font.size = Pt(16)
         run.font.color.rgb = COLOURS_RGB['purple']
+        run.font.name = 'Arial'
         
         subtitle = doc.add_paragraph()
         run = subtitle.add_run("Readiness Baseline")
-        run.font.size = Pt(12)
+        run.font.size = Pt(14)
         run.font.color.rgb = COLOURS_RGB['magenta']
+        run.font.name = 'Arial'
         
-        info_table = doc.add_table(rows=4, cols=2)
-        info_table.style = 'Table Grid'
-        for i, (label, value) in enumerate([
+        # Info table
+        self._create_info_table(doc, [
             ("Participant:", participant['name']),
             ("Role:", participant.get('role', 'Not specified')),
             ("Cohort:", cohort['name']),
             ("Assessment Date:", pre_date)
-        ]):
-            info_table.rows[i].cells[0].text = label
-            info_table.rows[i].cells[1].text = value
-            self._set_cell_shading(info_table.rows[i].cells[0], 'F5F5F5')
-            self._set_cell_margins(info_table.rows[i].cells[0])
-            self._set_cell_margins(info_table.rows[i].cells[1])
-            for cell in info_table.rows[i].cells:
-                for para in cell.paragraphs:
-                    for run in para.runs:
-                        run.font.size = Pt(10)
-                        if cell == info_table.rows[i].cells[0]:
-                            run.bold = True
+        ])
         
+        # Introduction
         doc.add_paragraph()
         heading = doc.add_paragraph()
         run = heading.add_run("Your Starting Point")
         run.bold = True
         run.font.size = Pt(14)
         run.font.color.rgb = COLOURS_RGB['purple']
+        run.font.name = 'Arial'
         
+        first_name = participant['name'].split()[0]
         intro = doc.add_paragraph()
-        intro.add_run(f"Welcome to the Launch Readiness programme, {participant['name'].split()[0]}. "
-                      f"This report captures your self-assessment before the programme begins.")
+        run = intro.add_run(f"Welcome to the Launch Readiness programme, {first_name}. "
+                           f"This report captures your self-assessment before the programme begins. "
+                           f"There are no right or wrong answers – this is simply a snapshot of where you see yourself today.")
+        run.font.name = 'Arial'
+        run.font.size = Pt(10)
         
+        # Radar chart section
         doc.add_paragraph()
         heading = doc.add_paragraph()
         run = heading.add_run("Your Readiness Profile")
         run.bold = True
         run.font.size = Pt(12)
         run.font.color.rgb = COLOURS_RGB['purple']
+        run.font.name = 'Arial'
         
+        # Create and insert radar chart
         with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
             self._create_radar_chart(indicator_scores, tmp.name)
             para = doc.add_paragraph()
             para.alignment = WD_ALIGN_PARAGRAPH.CENTER
             run = para.add_run()
-            run.add_picture(tmp.name, width=Inches(4.0))
+            run.add_picture(tmp.name, width=Inches(4.5))
+        
+        # Scale note
+        scale_para = doc.add_paragraph()
+        scale_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run = scale_para.add_run("Scale: 1-6 (1=Strongly Disagree, 6=Strongly Agree)")
+        run.italic = True
+        run.font.size = Pt(9)
+        run.font.color.rgb = COLOURS_RGB['mid_grey']
+        run.font.name = 'Arial'
         
         doc.add_paragraph()
-        summary_table = self._create_styled_table(doc, ["Indicator", "Score"])
-        for i, (ind, score) in enumerate(indicator_scores.items()):
-            self._add_table_row(summary_table, [ind, f"{score:.1f}"], i, [WD_ALIGN_PARAGRAPH.LEFT, WD_ALIGN_PARAGRAPH.CENTER])
         
-        overall_row = summary_table.add_row()
-        overall_row.cells[0].text = "OVERALL"
-        overall_row.cells[1].text = f"{overall_score:.1f}"
-        for cell in overall_row.cells:
-            self._set_cell_shading(cell, 'F5F5F5')
-            self._set_cell_margins(cell)
-            for para in cell.paragraphs:
-                for run in para.runs:
-                    run.bold = True
-                    run.font.size = Pt(9)
+        # Summary table
+        self._create_summary_table(doc, indicator_scores, overall_score)
         
         doc.add_page_break()
         
+        # Detailed scores by indicator
         for indicator, (start, end) in INDICATORS.items():
             colour_name = INDICATOR_COLOUR_MAP.get(indicator, 'purple')
             colour_hex = COLOURS_HEX[colour_name]
             
+            # Indicator heading
             heading = doc.add_paragraph()
             run = heading.add_run(indicator)
             run.bold = True
             run.font.size = Pt(12)
             run.font.color.rgb = COLOURS_RGB[colour_name]
+            run.font.name = 'Arial'
             
+            # Description with average
             desc = doc.add_paragraph()
             run = desc.add_run(INDICATOR_DESCRIPTIONS.get(indicator, ''))
             run.italic = True
             run.font.color.rgb = COLOURS_RGB['mid_grey']
             run.font.size = Pt(9)
-            desc.add_run("  |  Dimension Average: ")
+            run.font.name = 'Arial'
+            run = desc.add_run(f"  |  Dimension Average: ")
+            run.font.size = Pt(9)
+            run.font.name = 'Arial'
             run = desc.add_run(f"{indicator_scores.get(indicator, 0):.1f}")
             run.bold = True
+            run.font.size = Pt(9)
+            run.font.name = 'Arial'
             
-            items_table = self._create_styled_table(doc, ["#", "Statement", "Focus", "", "Score"], colour_hex.replace('#', ''))
-            
-            for idx, item_num in enumerate(range(start, end + 1)):
-                item = ITEMS[item_num]
-                score = pre_ratings.get(item_num, 0)
-                with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
-                    self._create_bar_chart(score, colour_hex, tmp.name)
-                    self._add_table_row(items_table, [str(item_num), item['text'], item['focus'], None, str(score)], idx,
-                                       [WD_ALIGN_PARAGRAPH.CENTER, WD_ALIGN_PARAGRAPH.LEFT, WD_ALIGN_PARAGRAPH.CENTER, WD_ALIGN_PARAGRAPH.CENTER, WD_ALIGN_PARAGRAPH.CENTER],
-                                       bar_image_path=tmp.name, bar_col=3)
+            # Items table
+            self._create_items_table(doc, indicator, start, end, pre_ratings, colour_hex)
             doc.add_paragraph()
         
+        # Overall Readiness section
         heading = doc.add_paragraph()
         run = heading.add_run("Overall Readiness")
         run.bold = True
         run.font.size = Pt(12)
         run.font.color.rgb = COLOURS_RGB['purple']
+        run.font.name = 'Arial'
         
-        overall_table = self._create_styled_table(doc, ["#", "Statement", "Focus", "", "Score"])
-        for idx, item_num in enumerate([31, 32]):
-            item = ITEMS[item_num]
-            score = pre_ratings.get(item_num, 0)
-            with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
-                self._create_bar_chart(score, COLOURS_HEX['purple'], tmp.name)
-                self._add_table_row(overall_table, [str(item_num), item['text'], item['focus'], None, str(score)], idx,
-                                   [WD_ALIGN_PARAGRAPH.CENTER, WD_ALIGN_PARAGRAPH.LEFT, WD_ALIGN_PARAGRAPH.CENTER, WD_ALIGN_PARAGRAPH.CENTER, WD_ALIGN_PARAGRAPH.CENTER],
-                                   bar_image_path=tmp.name, bar_col=3)
+        self._create_items_table(doc, "Overall", 31, 32, pre_ratings, COLOURS_HEX['purple'])
         
         doc.add_page_break()
         
+        # Reflections section
         heading = doc.add_paragraph()
         run = heading.add_run("Your Reflections")
         run.bold = True
         run.font.size = Pt(14)
         run.font.color.rgb = COLOURS_RGB['purple']
+        run.font.name = 'Arial'
         
         for q_num, question in OPEN_QUESTIONS_PRE.items():
+            # Question
             q_para = doc.add_paragraph()
             run = q_para.add_run(question)
             run.bold = True
+            run.font.size = Pt(10)
+            run.font.name = 'Arial'
+            
+            # Response (in italics, indented feel)
             response = pre_responses.get(q_num, "No response provided")
             r_para = doc.add_paragraph()
             run = r_para.add_run(response)
             run.italic = True
-            doc.add_paragraph()
+            run.font.size = Pt(10)
+            run.font.name = 'Arial'
         
+        doc.add_paragraph()
+        
+        # Closing note
         closing = doc.add_paragraph()
-        run = closing.add_run("Keep this report - you'll revisit it after the programme to see how far you've come.")
+        run = closing.add_run("Keep this report – you'll revisit it after the programme to see how far you've come.")
         run.italic = True
         run.font.color.rgb = COLOURS_RGB['mid_grey']
         run.font.size = Pt(9)
+        run.font.name = 'Arial'
         
+        # Save
         buffer = io.BytesIO()
         doc.save(buffer)
         buffer.seek(0)
         return buffer
     
     def generate_progress_report(self, participant_id, cohort_id):
+        """Generate a Progress report (PRE vs POST comparison)."""
         data = self.db.get_participant_data(participant_id)
         if not data or not data['pre'] or not data['post']:
             raise ValueError("Both PRE and POST assessments required")
+        
         participant = data['participant']
         cohort = data['cohort']
         pre_ratings = data['pre']['ratings']
@@ -423,6 +606,7 @@ class ReportGenerator:
         pre_overall = self._calculate_overall_score(pre_ratings)
         post_overall = self._calculate_overall_score(post_ratings)
         
+        # Cohort averages
         cohort_avgs = self.db.get_cohort_averages(cohort_id, 'POST')
         cohort_indicator_scores = {}
         for indicator, (start, end) in INDICATORS.items():
@@ -434,32 +618,28 @@ class ReportGenerator:
         style = doc.styles['Normal']
         style.font.name = 'Arial'
         style.font.size = Pt(10)
+        
         self._add_logo_header(doc)
         
+        # Title
         title = doc.add_paragraph()
         run = title.add_run("THE READINESS FRAMEWORK")
         run.bold = True
-        run.font.size = Pt(14)
+        run.font.size = Pt(16)
         run.font.color.rgb = COLOURS_RGB['purple']
         
         subtitle = doc.add_paragraph()
         run = subtitle.add_run("Readiness Progress")
-        run.font.size = Pt(12)
+        run.font.size = Pt(14)
         run.font.color.rgb = COLOURS_RGB['magenta']
         
-        info_table = doc.add_table(rows=4, cols=2)
-        info_table.style = 'Table Grid'
-        for i, (label, value) in enumerate([
+        # Info table
+        self._create_info_table(doc, [
             ("Participant:", participant['name']),
             ("Role:", participant.get('role', 'Not specified')),
             ("Pre-Assessment:", pre_date),
             ("Post-Assessment:", post_date)
-        ]):
-            info_table.rows[i].cells[0].text = label
-            info_table.rows[i].cells[1].text = value
-            self._set_cell_shading(info_table.rows[i].cells[0], 'F5F5F5')
-            self._set_cell_margins(info_table.rows[i].cells[0])
-            self._set_cell_margins(info_table.rows[i].cells[1])
+        ])
         
         doc.add_paragraph()
         heading = doc.add_paragraph()
@@ -469,10 +649,12 @@ class ReportGenerator:
         run.font.color.rgb = COLOURS_RGB['purple']
         
         change = post_overall - pre_overall
+        first_name = participant['name'].split()[0]
         intro = doc.add_paragraph()
-        intro.add_run(f"Congratulations, {participant['name'].split()[0]}! Your overall readiness improved from "
+        intro.add_run(f"Congratulations, {first_name}! Your overall readiness improved from "
                       f"{pre_overall:.1f} to {post_overall:.1f} (+{change:.1f}).")
         
+        # Comparison radar chart
         doc.add_paragraph()
         heading = doc.add_paragraph()
         run = heading.add_run("Your Growth Profile")
@@ -485,37 +667,63 @@ class ReportGenerator:
             para = doc.add_paragraph()
             para.alignment = WD_ALIGN_PARAGRAPH.CENTER
             run = para.add_run()
-            run.add_picture(tmp.name, width=Inches(4.0))
+            run.add_picture(tmp.name, width=Inches(4.5))
         
+        # Summary table with Pre/Post/Change/Cohort
         doc.add_paragraph()
-        summary_table = self._create_styled_table(doc, ["Indicator", "Pre", "Post", "Change", "Cohort"])
-        for i, indicator in enumerate(INDICATORS.keys()):
+        table = doc.add_table(rows=1, cols=5)
+        table.style = 'Table Grid'
+        
+        headers = ["Indicator", "Pre", "Post", "Change", "Cohort"]
+        for i, h in enumerate(headers):
+            table.rows[0].cells[i].text = h
+            self._set_cell_shading(table.rows[0].cells[i], '461E96')
+            self._set_cell_margins(table.rows[0].cells[i])
+            for para in table.rows[0].cells[i].paragraphs:
+                para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                for run in para.runs:
+                    run.font.bold = True
+                    run.font.color.rgb = COLOURS_RGB['white']
+                    run.font.size = Pt(9)
+        
+        for idx, indicator in enumerate(INDICATORS.keys()):
+            row = table.add_row()
             pre = pre_indicator_scores.get(indicator, 0)
             post = post_indicator_scores.get(indicator, 0)
             ch = post - pre
             coh = cohort_indicator_scores.get(indicator, 0)
-            self._add_table_row(summary_table, [indicator, f"{pre:.1f}", f"{post:.1f}", f"+{ch:.1f}" if ch > 0 else f"{ch:.1f}", f"{coh:.1f}"], i,
-                               [WD_ALIGN_PARAGRAPH.LEFT] + [WD_ALIGN_PARAGRAPH.CENTER] * 4)
+            values = [indicator, f"{pre:.1f}", f"{post:.1f}", f"+{ch:.1f}" if ch > 0 else f"{ch:.1f}", f"{coh:.1f}"]
+            bg = 'FFFFFF' if idx % 2 == 0 else 'FDF6E3'
+            for j, cell in enumerate(row.cells):
+                cell.text = values[j]
+                self._set_cell_shading(cell, bg)
+                self._set_cell_margins(cell)
+                for para in cell.paragraphs:
+                    para.alignment = WD_ALIGN_PARAGRAPH.CENTER if j > 0 else WD_ALIGN_PARAGRAPH.LEFT
+                    for run in para.runs:
+                        run.font.size = Pt(9)
         
+        # Overall row
+        row = table.add_row()
         ch = post_overall - pre_overall
-        overall_row = summary_table.add_row()
-        for j, val in enumerate(["OVERALL", f"{pre_overall:.1f}", f"{post_overall:.1f}", f"+{ch:.1f}" if ch > 0 else f"{ch:.1f}", f"{cohort_overall:.1f}"]):
-            overall_row.cells[j].text = val
-            self._set_cell_shading(overall_row.cells[j], 'F5F5F5')
-            self._set_cell_margins(overall_row.cells[j])
-            for para in overall_row.cells[j].paragraphs:
+        values = ["OVERALL", f"{pre_overall:.1f}", f"{post_overall:.1f}", 
+                  f"+{ch:.1f}" if ch > 0 else f"{ch:.1f}", f"{cohort_overall:.1f}"]
+        for j, cell in enumerate(row.cells):
+            cell.text = values[j]
+            self._set_cell_shading(cell, 'F5F5F5')
+            self._set_cell_margins(cell)
+            for para in cell.paragraphs:
+                para.alignment = WD_ALIGN_PARAGRAPH.CENTER if j > 0 else WD_ALIGN_PARAGRAPH.LEFT
                 for run in para.runs:
                     run.bold = True
                     run.font.size = Pt(9)
         
         doc.add_page_break()
         
+        # Detailed comparison by indicator (simplified for now)
         for indicator, (start, end) in INDICATORS.items():
             colour_name = INDICATOR_COLOUR_MAP.get(indicator, 'purple')
             colour_hex = COLOURS_HEX[colour_name]
-            pre_avg = pre_indicator_scores.get(indicator, 0)
-            post_avg = post_indicator_scores.get(indicator, 0)
-            change = post_avg - pre_avg
             
             heading = doc.add_paragraph()
             run = heading.add_run(indicator)
@@ -523,33 +731,71 @@ class ReportGenerator:
             run.font.size = Pt(12)
             run.font.color.rgb = COLOURS_RGB[colour_name]
             
+            pre_avg = pre_indicator_scores.get(indicator, 0)
+            post_avg = post_indicator_scores.get(indicator, 0)
+            change = post_avg - pre_avg
+            
             desc = doc.add_paragraph()
-            run = desc.add_run(INDICATOR_DESCRIPTIONS.get(indicator, ''))
-            run.italic = True
-            run.font.color.rgb = COLOURS_RGB['mid_grey']
+            run = desc.add_run(f"Pre: {pre_avg:.1f} → Post: {post_avg:.1f} ")
             run.font.size = Pt(9)
-            desc.add_run(f"  |  Pre: {pre_avg:.1f} -> Post: {post_avg:.1f} ")
             change_run = desc.add_run(f"(+{change:.1f})" if change > 0 else f"({change:.1f})")
             change_run.bold = True
             if change > 0:
                 change_run.font.color.rgb = COLOURS_RGB['success_green']
             
-            items_table = self._create_styled_table(doc, ["#", "Statement", "Focus", "Pre", "Post", "", "Chg"], colour_hex.replace('#', ''))
+            # Comparison items table
+            table = doc.add_table(rows=1, cols=6)
+            table.style = 'Table Grid'
+            headers = ["#", "Statement", "Pre", "Post", "", "Chg"]
+            col_widths = [0.28, 3.5, 0.5, 0.5, 0.7, 0.5]
+            for i, h in enumerate(headers):
+                table.rows[0].cells[i].text = h
+                self._set_cell_shading(table.rows[0].cells[i], colour_hex.replace('#', ''))
+                self._set_cell_margins(table.rows[0].cells[i])
+                table.rows[0].cells[i].width = Inches(col_widths[i])
+                for para in table.rows[0].cells[i].paragraphs:
+                    para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                    for run in para.runs:
+                        run.font.bold = True
+                        run.font.color.rgb = COLOURS_RGB['white']
+                        run.font.size = Pt(8)
             
             for idx, item_num in enumerate(range(start, end + 1)):
                 item = ITEMS[item_num]
                 pre_score = pre_ratings.get(item_num, 0)
                 post_score = post_ratings.get(item_num, 0)
                 item_ch = post_score - pre_score
+                
                 with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
                     self._create_comparison_bar_chart(pre_score, post_score, colour_hex, tmp.name)
-                    self._add_table_row(items_table, [str(item_num), item['text'], item['focus'], str(pre_score), str(post_score), None, f"+{item_ch}" if item_ch > 0 else str(item_ch)], idx,
-                                       [WD_ALIGN_PARAGRAPH.CENTER, WD_ALIGN_PARAGRAPH.LEFT, WD_ALIGN_PARAGRAPH.CENTER, WD_ALIGN_PARAGRAPH.CENTER, WD_ALIGN_PARAGRAPH.CENTER, WD_ALIGN_PARAGRAPH.CENTER, WD_ALIGN_PARAGRAPH.CENTER],
-                                       bar_image_path=tmp.name, bar_col=5)
+                    bar_path = tmp.name
+                
+                row = table.add_row()
+                bg = 'FFFFFF' if idx % 2 == 0 else 'FDF6E3'
+                values = [str(item_num), item['text'], str(pre_score), str(post_score), None, 
+                         f"+{item_ch}" if item_ch > 0 else str(item_ch)]
+                
+                for j, cell in enumerate(row.cells):
+                    cell.width = Inches(col_widths[j])
+                    self._set_cell_shading(cell, bg)
+                    self._set_cell_margins(cell)
+                    if j == 4:
+                        para = cell.paragraphs[0]
+                        para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                        run = para.add_run()
+                        run.add_picture(bar_path, width=Inches(0.6))
+                    else:
+                        cell.text = str(values[j]) if values[j] is not None else ''
+                        for para in cell.paragraphs:
+                            para.alignment = WD_ALIGN_PARAGRAPH.CENTER if j != 1 else WD_ALIGN_PARAGRAPH.LEFT
+                            for run in para.runs:
+                                run.font.size = Pt(8)
+            
             doc.add_paragraph()
         
         doc.add_page_break()
         
+        # Reflections
         heading = doc.add_paragraph()
         run = heading.add_run("Your Reflections")
         run.bold = True
@@ -560,27 +806,20 @@ class ReportGenerator:
             q_para = doc.add_paragraph()
             run = q_para.add_run(question)
             run.bold = True
+            
             if q_num == 3:
                 original = pre_responses.get(3, "")
                 if original:
                     orig_para = doc.add_paragraph()
-                    run = orig_para.add_run("Your original concern: ")
+                    run = orig_para.add_run(f"Your original concern: \"{original}\"")
+                    run.italic = True
                     run.font.color.rgb = COLOURS_RGB['mid_grey']
                     run.font.size = Pt(9)
-                    run = orig_para.add_run(f'"{original}"')
-                    run.italic = True
-                    run.font.size = Pt(9)
+            
             response = post_responses.get(q_num, "No response provided")
             r_para = doc.add_paragraph()
             run = r_para.add_run(response)
             run.italic = True
-            doc.add_paragraph()
-        
-        closing = doc.add_paragraph()
-        run = closing.add_run("For questions about your development plan, speak with your facilitator or line manager.")
-        run.italic = True
-        run.font.color.rgb = COLOURS_RGB['mid_grey']
-        run.font.size = Pt(9)
         
         buffer = io.BytesIO()
         doc.save(buffer)
@@ -588,12 +827,15 @@ class ReportGenerator:
         return buffer
     
     def generate_impact_report(self, cohort_id):
+        """Generate an Impact report (cohort summary)."""
         cohort_data = self.db.get_cohort_data(cohort_id)
         if not cohort_data:
             raise ValueError("Cohort not found")
+        
         cohort = cohort_data['cohort']
         participants = cohort_data['participants']
         complete_participants = [p for p in participants if p['pre'] and p['post']]
+        
         if len(complete_participants) < 2:
             raise ValueError("Need at least 2 participants with complete data")
         
@@ -611,13 +853,7 @@ class ReportGenerator:
         pre_overall = sum(pre_avgs.get(i, {}).get('avg', 0) for i in range(1, 33)) / 32
         post_overall = sum(post_avgs.get(i, {}).get('avg', 0) for i in range(1, 33)) / 32
         
-        pre_focus = {}
-        post_focus = {}
-        for focus in FOCUS_TAGS.keys():
-            items = get_items_by_focus(focus)
-            pre_focus[focus] = sum(pre_avgs.get(i, {}).get('avg', 0) for i in items) / len(items) if items else 0
-            post_focus[focus] = sum(post_avgs.get(i, {}).get('avg', 0) for i in items) / len(items) if items else 0
-        
+        # Theme extraction
         takeaway_responses = [p['post']['open_responses'].get(1, '') for p in complete_participants if p['post']['open_responses'].get(1)]
         commitment_responses = [p['post']['open_responses'].get(2, '') for p in complete_participants if p['post']['open_responses'].get(2)]
         
@@ -628,33 +864,27 @@ class ReportGenerator:
         style = doc.styles['Normal']
         style.font.name = 'Arial'
         style.font.size = Pt(10)
+        
         self._add_logo_header(doc)
         
         title = doc.add_paragraph()
         run = title.add_run("THE READINESS FRAMEWORK")
         run.bold = True
-        run.font.size = Pt(14)
+        run.font.size = Pt(16)
         run.font.color.rgb = COLOURS_RGB['purple']
         
         subtitle = doc.add_paragraph()
         run = subtitle.add_run("Readiness Impact")
-        run.font.size = Pt(12)
+        run.font.size = Pt(14)
         run.font.color.rgb = COLOURS_RGB['magenta']
         
-        info_table = doc.add_table(rows=4, cols=2)
-        info_table.style = 'Table Grid'
         completion_rate = int(cohort_data['post_completed'] / len(participants) * 100) if participants else 0
-        for i, (label, value) in enumerate([
+        self._create_info_table(doc, [
             ("Programme:", cohort.get('programme', 'Launch Readiness')),
             ("Cohort:", cohort['name']),
-            ("Participants:", f"{len(participants)} enrolled | {cohort_data['post_completed']} post"),
-            ("Period:", f"{cohort.get('start_date', 'TBC')} to {cohort.get('end_date', 'TBC')}")
-        ]):
-            info_table.rows[i].cells[0].text = label
-            info_table.rows[i].cells[1].text = value
-            self._set_cell_shading(info_table.rows[i].cells[0], 'F5F5F5')
-            self._set_cell_margins(info_table.rows[i].cells[0])
-            self._set_cell_margins(info_table.rows[i].cells[1])
+            ("Participants:", f"{len(participants)} enrolled | {cohort_data['post_completed']} completed"),
+            ("Completion Rate:", f"{completion_rate}%")
+        ])
         
         doc.add_paragraph()
         heading = doc.add_paragraph()
@@ -668,77 +898,47 @@ class ReportGenerator:
         summary.add_run(f"The programme delivered measurable improvement. Cohort average scores increased from "
                         f"{pre_overall:.1f} to {post_overall:.1f} (+{change:.1f} on a 6-point scale).")
         
-        doc.add_paragraph()
-        metrics_table = doc.add_table(rows=1, cols=4)
-        metrics_table.style = 'Table Grid'
-        metrics = [
-            (f"+{change:.1f}", "Avg Increase", '461E96'),
-            (f"{completion_rate}%", "Completion", '00B4E6'),
-            ("100%", "Improved", 'E6008C'),
-            ("79%", "Agree+", '00DC8C')
-        ]
-        for i, (value, label, colour) in enumerate(metrics):
-            cell = metrics_table.rows[0].cells[i]
-            self._set_cell_shading(cell, colour)
-            self._set_cell_margins(cell, 80, 80, 60, 60)
-            para = cell.paragraphs[0]
-            para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            run = para.add_run(value)
-            run.bold = True
-            run.font.size = Pt(18)
-            run.font.color.rgb = COLOURS_RGB['white']
-            para2 = cell.add_paragraph()
-            para2.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            run2 = para2.add_run(label)
-            run2.font.size = Pt(8)
-            run2.font.color.rgb = COLOURS_RGB['white']
-        
-        doc.add_page_break()
-        
-        heading = doc.add_paragraph()
-        run = heading.add_run("Indicator Results")
-        run.bold = True
-        run.font.size = Pt(14)
-        run.font.color.rgb = COLOURS_RGB['purple']
-        
+        # Comparison radar
         with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
             self._create_comparison_radar_chart(pre_indicator_scores, post_indicator_scores, tmp.name)
             para = doc.add_paragraph()
             para.alignment = WD_ALIGN_PARAGRAPH.CENTER
             run = para.add_run()
-            run.add_picture(tmp.name, width=Inches(4.0))
+            run.add_picture(tmp.name, width=Inches(4.5))
         
+        # Results table
         doc.add_paragraph()
-        results_table = self._create_styled_table(doc, ["Indicator", "Pre", "Post", "Change"])
-        for i, indicator in enumerate(INDICATORS.keys()):
+        table = doc.add_table(rows=1, cols=4)
+        table.style = 'Table Grid'
+        headers = ["Indicator", "Pre", "Post", "Change"]
+        for i, h in enumerate(headers):
+            table.rows[0].cells[i].text = h
+            self._set_cell_shading(table.rows[0].cells[i], '461E96')
+            self._set_cell_margins(table.rows[0].cells[i])
+            for para in table.rows[0].cells[i].paragraphs:
+                para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                for run in para.runs:
+                    run.font.bold = True
+                    run.font.color.rgb = COLOURS_RGB['white']
+                    run.font.size = Pt(10)
+        
+        for idx, indicator in enumerate(INDICATORS.keys()):
+            row = table.add_row()
             pre = pre_indicator_scores.get(indicator, 0)
             post = post_indicator_scores.get(indicator, 0)
             ch = post - pre
-            self._add_table_row(results_table, [indicator, f"{pre:.1f}", f"{post:.1f}", f"+{ch:.1f}" if ch > 0 else f"{ch:.1f}"], i,
-                               [WD_ALIGN_PARAGRAPH.LEFT] + [WD_ALIGN_PARAGRAPH.CENTER] * 3)
+            values = [indicator, f"{pre:.1f}", f"{post:.1f}", f"+{ch:.1f}" if ch > 0 else f"{ch:.1f}"]
+            bg = 'FFFFFF' if idx % 2 == 0 else 'FDF6E3'
+            for j, cell in enumerate(row.cells):
+                cell.text = values[j]
+                self._set_cell_shading(cell, bg)
+                self._set_cell_margins(cell)
+                for para in cell.paragraphs:
+                    para.alignment = WD_ALIGN_PARAGRAPH.CENTER if j > 0 else WD_ALIGN_PARAGRAPH.LEFT
+                    for run in para.runs:
+                        run.font.size = Pt(10)
         
-        doc.add_paragraph()
-        heading = doc.add_paragraph()
-        run = heading.add_run("Impact by Focus Area (BACK)")
-        run.bold = True
-        run.font.size = Pt(14)
-        run.font.color.rgb = COLOURS_RGB['purple']
-        
-        doc.add_paragraph()
-        focus_table = self._create_styled_table(doc, ["Focus", "Description", "Pre", "Post", "Change"])
-        focus_data = [
-            ("Behaviour", "Actions, habits and practices"),
-            ("Awareness", "Recognition of own patterns, triggers"),
-            ("Confidence", "Self-belief and comfort in capability"),
-            ("Knowledge", "Understanding of concepts, frameworks"),
-        ]
-        for i, (focus, desc) in enumerate(focus_data):
-            pre = pre_focus.get(focus, 0)
-            post = post_focus.get(focus, 0)
-            ch = post - pre
-            self._add_table_row(focus_table, [focus, desc, f"{pre:.1f}", f"{post:.1f}", f"+{ch:.1f}" if ch > 0 else f"{ch:.1f}"], i,
-                               [WD_ALIGN_PARAGRAPH.LEFT, WD_ALIGN_PARAGRAPH.LEFT, WD_ALIGN_PARAGRAPH.CENTER, WD_ALIGN_PARAGRAPH.CENTER, WD_ALIGN_PARAGRAPH.CENTER])
-        
+        # Themes
         doc.add_paragraph()
         heading = doc.add_paragraph()
         run = heading.add_run("Qualitative Themes")
@@ -746,27 +946,22 @@ class ReportGenerator:
         run.font.size = Pt(14)
         run.font.color.rgb = COLOURS_RGB['purple']
         
-        subheading = doc.add_paragraph()
-        run = subheading.add_run("Most Valuable Takeaways")
+        sub = doc.add_paragraph()
+        run = sub.add_run("Most Valuable Takeaways")
         run.bold = True
         themes = format_themes_for_report(takeaway_themes)
-        if themes:
-            for theme in themes:
-                doc.add_paragraph(f"* {theme}")
-        else:
-            doc.add_paragraph("Manual review of responses recommended.")
+        for theme in (themes or ["Manual review recommended"]):
+            doc.add_paragraph(f"• {theme}")
         
         doc.add_paragraph()
-        subheading = doc.add_paragraph()
-        run = subheading.add_run("Commitments to Action")
+        sub = doc.add_paragraph()
+        run = sub.add_run("Commitments to Action")
         run.bold = True
         themes = format_themes_for_report(commitment_themes)
-        if themes:
-            for theme in themes:
-                doc.add_paragraph(f"* {theme}")
-        else:
-            doc.add_paragraph("Manual review of responses recommended.")
+        for theme in (themes or ["Manual review recommended"]):
+            doc.add_paragraph(f"• {theme}")
         
+        # Recommendations
         doc.add_paragraph()
         heading = doc.add_paragraph()
         run = heading.add_run("Recommendations")
@@ -774,21 +969,13 @@ class ReportGenerator:
         run.font.size = Pt(12)
         run.font.color.rgb = COLOURS_RGB['purple']
         
-        recommendations = [
-            "Reinforce time management - protecting time for important work remains a development area",
+        for i, rec in enumerate([
+            "Reinforce time management – protecting time remains a development area",
             "Support awareness development through follow-up coaching",
-            "Leverage the feedback frameworks - ensure line managers support application",
+            "Leverage feedback frameworks – ensure line managers support application",
             "Consider 90-day follow-up to measure sustained application"
-        ]
-        for i, rec in enumerate(recommendations, 1):
+        ], 1):
             doc.add_paragraph(f"{i}. {rec}")
-        
-        doc.add_paragraph()
-        closing = doc.add_paragraph()
-        run = closing.add_run("For questions or follow-up interventions, contact the programme facilitators.")
-        run.italic = True
-        run.font.color.rgb = COLOURS_RGB['mid_grey']
-        run.font.size = Pt(9)
         
         buffer = io.BytesIO()
         doc.save(buffer)
