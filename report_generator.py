@@ -45,8 +45,6 @@ INDICATOR_COLOUR_MAP = {
     'Professional Readiness': 'magenta', 'Team Readiness': 'green'
 }
 
-LOGO_PATH = Path(__file__).parent / 'assets' / 'cencora_logo.png'
-
 
 class ReportGenerator:
     def __init__(self, db):
@@ -163,13 +161,29 @@ class ReportGenerator:
         tcPr.append(tcMar)
     
     def _add_logo_header(self, doc):
-        if LOGO_PATH.exists():
-            section = doc.sections[0]
-            header = section.header
-            header_para = header.paragraphs[0] if header.paragraphs else header.add_paragraph()
-            header_para.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-            run = header_para.add_run()
-            run.add_picture(str(LOGO_PATH), width=Inches(1.0))
+        # Try multiple possible logo paths
+        possible_paths = [
+            Path(__file__).parent / 'assets' / 'cencora_logo.png',
+            Path('/mount/src/cencora-readiness/assets/cencora_logo.png'),
+            Path('assets/cencora_logo.png'),
+        ]
+        
+        logo_path = None
+        for path in possible_paths:
+            if path.exists():
+                logo_path = path
+                break
+        
+        if logo_path:
+            try:
+                section = doc.sections[0]
+                header = section.header
+                header_para = header.paragraphs[0] if header.paragraphs else header.add_paragraph()
+                header_para.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+                run = header_para.add_run()
+                run.add_picture(str(logo_path), width=Inches(1.0))
+            except Exception:
+                pass  # Skip logo if it fails
     
     def _create_styled_table(self, doc, headers, header_colour_hex='461E96'):
         table = doc.add_table(rows=1, cols=len(headers))
