@@ -47,76 +47,117 @@ def show_assessment(db, token: str):
             pre_responses = db.get_open_responses(assessments['PRE']['id'])
             pre_concern = pre_responses.get(3, "")  # Question 3 was concerns
     
-    # Page styling
+    # Page styling - mobile friendly
     st.markdown("""
     <style>
-        .assessment-header {
+        .main-title {
             color: #461E96;
             font-size: 1.8rem;
             font-weight: bold;
             margin-bottom: 0.5rem;
         }
-        .assessment-subheader {
+        .sub-title {
             color: #E6008C;
             font-size: 1.1rem;
             margin-bottom: 1.5rem;
         }
         .indicator-header {
-            font-size: 1.2rem;
+            font-size: 1.1rem;
             font-weight: bold;
             margin-top: 1.5rem;
             margin-bottom: 0.5rem;
-            padding: 0.5rem;
+            padding: 0.75rem;
             border-radius: 4px;
             color: white;
         }
         .welcome-box {
             background-color: #F5F5F5;
-            padding: 1.5rem;
+            padding: 1.2rem;
             border-radius: 8px;
             border-left: 4px solid #461E96;
             margin-bottom: 1.5rem;
+            line-height: 1.6;
+        }
+        .welcome-box strong {
+            color: #461E96;
+        }
+        .question-text {
+            font-size: 0.95rem;
+            line-height: 1.4;
+            margin-bottom: 0.5rem;
+        }
+        .warning-box {
+            background-color: #FFF3CD;
+            border: 1px solid #FFCC00;
+            border-radius: 8px;
+            padding: 1rem;
+            margin: 1rem 0;
+        }
+        /* Mobile responsive */
+        @media (max-width: 768px) {
+            .main-title { font-size: 1.4rem; }
+            .indicator-header { font-size: 1rem; padding: 0.5rem; }
         }
     </style>
     """, unsafe_allow_html=True)
     
     # Header
     assessment_title = "Pre-Programme Assessment" if is_pre else "Post-Programme Assessment"
-    st.markdown(f'<p class="assessment-header">🚀 Launch Readiness</p>', unsafe_allow_html=True)
-    st.markdown(f'<p class="assessment-subheader">{assessment_title}</p>', unsafe_allow_html=True)
+    st.markdown(f'<p class="main-title">🚀 Launch Readiness</p>', unsafe_allow_html=True)
+    st.markdown(f'<p class="sub-title">{assessment_title}</p>', unsafe_allow_html=True)
     
-    # Welcome message
+    # Welcome message - using proper HTML
+    first_name = participant['name'].split()[0]
     if is_pre:
-        welcome_text = f"""
-        Welcome, **{participant['name']}**! 
-        
-        This assessment will help you reflect on your current readiness as you prepare for your new role.
-        There are no right or wrong answers - this is simply a snapshot of where you see yourself today.
-        
-        The assessment takes about **10-15 minutes** to complete. Please answer honestly - your responses
-        are confidential and will be used to support your development.
+        welcome_html = f"""
+        <div class="welcome-box">
+            <p>Welcome, <strong>{first_name}</strong>!</p>
+            <p>This assessment will help you reflect on your current readiness as you prepare for your new role.
+            There are no right or wrong answers – this is simply a snapshot of where you see yourself today.</p>
+            <p>The assessment takes about <strong>10-15 minutes</strong> to complete. Please answer honestly – your responses
+            are confidential and will be used to support your development.</p>
+        </div>
         """
     else:
-        welcome_text = f"""
-        Welcome back, **{participant['name']}**!
-        
-        Now that you've completed the Launch Readiness programme, this assessment will help capture
-        your growth and identify areas for continued development.
-        
-        As before, there are no right or wrong answers. Your honest reflection will help us understand
-        the programme's impact and support your ongoing development.
+        welcome_html = f"""
+        <div class="welcome-box">
+            <p>Welcome back, <strong>{first_name}</strong>!</p>
+            <p>Now that you've completed the Launch Readiness programme, this assessment will help capture
+            your growth and identify areas for continued development.</p>
+            <p>As before, there are no right or wrong answers. Your honest reflection will help us understand
+            the programme's impact and support your ongoing development.</p>
+        </div>
         """
     
-    st.markdown(f'<div class="welcome-box">{welcome_text}</div>', unsafe_allow_html=True)
+    st.markdown(welcome_html, unsafe_allow_html=True)
     
     st.divider()
+    
+    # Initialize session state for tracking which sliders have been moved
+    if 'sliders_moved' not in st.session_state:
+        st.session_state.sliders_moved = set()
+    
+    if 'confirmed_unchanged' not in st.session_state:
+        st.session_state.confirmed_unchanged = False
     
     # Assessment form
     with st.form("assessment_form"):
         ratings = {}
         
         # Rating scale reminder
-        st.caption("**Rating Scale:** 1 = Strongly Disagree, 2 = Disagree, 3 = Slightly Disagree, 4 = Slightly Agree, 5 = Agree, 6 = Strongly Agree")
+        st.markdown("**Rating Scale:**")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.caption("1 = Strongly Disagree")
+            st.caption("2 = Disagree")
+        with col2:
+            st.caption("3 = Slightly Disagree")
+            st.caption("4 = Slightly Agree")
+        with col3:
+            st.caption("5 = Agree")
+            st.caption("6 = Strongly Agree")
+        
+        st.divider()
         
         # Loop through indicators
         for indicator, (start, end) in INDICATORS.items():
@@ -131,19 +172,21 @@ def show_assessment(db, token: str):
             for item_num in range(start, end + 1):
                 item = ITEMS[item_num]
                 
-                col1, col2 = st.columns([4, 2])
-                with col1:
-                    st.write(f"**{item_num}.** {item['text']}")
-                with col2:
-                    ratings[item_num] = st.select_slider(
-                        f"Rating for item {item_num}",
-                        options=[1, 2, 3, 4, 5, 6],
-                        value=4,
-                        key=f"rating_{item_num}",
-                        label_visibility="collapsed"
-                    )
+                st.markdown(f"**{item_num}.** {item['text']}")
+                
+                # Slider starting at 1, with scale labels
+                ratings[item_num] = st.select_slider(
+                    f"Rating for item {item_num}",
+                    options=[1, 2, 3, 4, 5, 6],
+                    value=1,  # Start at left edge
+                    format_func=lambda x: f"{x}",
+                    key=f"rating_{item_num}",
+                    label_visibility="collapsed"
+                )
+                
+                st.write("")  # Spacing between questions
             
-            st.write("")  # Spacing
+            st.divider()
         
         # Overall Readiness
         st.markdown(
@@ -153,29 +196,28 @@ def show_assessment(db, token: str):
         
         for item_num in [31, 32]:
             item = ITEMS[item_num]
-            col1, col2 = st.columns([4, 2])
-            with col1:
-                st.write(f"**{item_num}.** {item['text']}")
-            with col2:
-                ratings[item_num] = st.select_slider(
-                    f"Rating for item {item_num}",
-                    options=[1, 2, 3, 4, 5, 6],
-                    value=4,
-                    key=f"rating_{item_num}",
-                    label_visibility="collapsed"
-                )
+            st.markdown(f"**{item_num}.** {item['text']}")
+            ratings[item_num] = st.select_slider(
+                f"Rating for item {item_num}",
+                options=[1, 2, 3, 4, 5, 6],
+                value=1,  # Start at left edge
+                format_func=lambda x: f"{x}",
+                key=f"rating_{item_num}",
+                label_visibility="collapsed"
+            )
+            st.write("")
         
         st.divider()
         
         # Open questions
-        st.subheader("Your Reflections")
+        st.markdown('<div class="indicator-header" style="background-color: #461E96;">Your Reflections</div>', unsafe_allow_html=True)
         
         open_responses = {}
         
         for q_num, question in open_questions.items():
             # Special handling for POST question 3 (show original concern)
             if not is_pre and q_num == 3 and pre_concern:
-                st.write(f"**{q_num}. {question}**")
+                st.markdown(f"**{q_num}. {question}**")
                 st.info(f"**Your original concern:** \"{pre_concern}\"")
                 open_responses[q_num] = st.text_area(
                     "Your reflection",
@@ -185,22 +227,42 @@ def show_assessment(db, token: str):
                     label_visibility="collapsed"
                 )
             else:
+                st.markdown(f"**{q_num}. {question}**")
                 open_responses[q_num] = st.text_area(
-                    f"**{q_num}. {question}**",
+                    f"Response to question {q_num}",
                     key=f"open_{q_num}",
                     height=100,
-                    placeholder="Share your thoughts..."
+                    placeholder="Share your thoughts...",
+                    label_visibility="collapsed"
                 )
+            st.write("")
         
         st.divider()
+        
+        # Confirmation checkbox for unchanged ratings
+        confirm_unchanged = st.checkbox(
+            "I confirm I have reviewed all my responses and they are correct",
+            key="confirm_checkbox"
+        )
         
         # Submit button
         submitted = st.form_submit_button("Submit Assessment", type="primary", use_container_width=True)
         
         if submitted:
-            # Validate all ratings are provided (they have defaults, so should be fine)
-            if len(ratings) < 32:
-                st.error("Please complete all rating questions.")
+            # Check for ratings still at 1 (potentially unchanged)
+            unchanged_items = [num for num, score in ratings.items() if score == 1]
+            
+            if unchanged_items and not confirm_unchanged:
+                # Show warning about potentially unchanged items
+                st.warning(f"""
+                ⚠️ **Please review your responses**
+                
+                The following questions are rated as '1 - Strongly Disagree': **{', '.join(str(i) for i in unchanged_items)}**
+                
+                If these ratings are intentional, please tick the confirmation box above and submit again.
+                
+                If you meant to rate them differently, please adjust your responses before submitting.
+                """)
             else:
                 # Save ratings
                 db.save_all_ratings(assessment['id'], ratings)
@@ -214,7 +276,7 @@ def show_assessment(db, token: str):
                 st.success("Thank you! Your assessment has been submitted successfully.")
                 st.balloons()
                 
-                # Show completion message
+                # Rerun to show completion message
                 st.rerun()
 
 
@@ -229,29 +291,36 @@ def show_completion_message(assessment_type: str):
             border-radius: 8px;
             text-align: center;
             border: 2px solid #00DC8C;
+            margin-top: 2rem;
+        }
+        .completion-box h2 {
+            color: #2E7D32;
+            margin-bottom: 1rem;
+        }
+        .completion-box p {
+            color: #3B3B3B;
+            margin-bottom: 0.5rem;
         }
     </style>
     """, unsafe_allow_html=True)
     
-    st.markdown('<p class="assessment-header">🚀 Launch Readiness</p>', unsafe_allow_html=True)
+    st.markdown('<p class="main-title">🚀 Launch Readiness</p>', unsafe_allow_html=True)
     
     if assessment_type == 'PRE':
-        message = """
+        st.markdown("""
         <div class="completion-box">
             <h2>✅ Assessment Complete</h2>
             <p>You have already completed your <strong>Pre-Programme Assessment</strong>.</p>
             <p>Thank you for your responses. We look forward to seeing you in the programme!</p>
             <p><em>You will receive a link to complete your Post-Programme Assessment after the programme ends.</em></p>
         </div>
-        """
+        """, unsafe_allow_html=True)
     else:
-        message = """
+        st.markdown("""
         <div class="completion-box">
             <h2>✅ Assessment Complete</h2>
             <p>You have already completed your <strong>Post-Programme Assessment</strong>.</p>
             <p>Thank you for your participation in the Launch Readiness programme!</p>
             <p><em>Your facilitator will share your Progress Report with you shortly.</em></p>
         </div>
-        """
-    
-    st.markdown(message, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
