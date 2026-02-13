@@ -73,15 +73,21 @@ class ReportGenerator:
         indicators = list(INDICATORS.keys())
         values = [scores.get(ind, 0) for ind in indicators]
         
-        # Larger figure to prevent cropping
         fig = plt.figure(figsize=(8, 8))
         ax = fig.add_subplot(111, polar=True)
         fig.patch.set_facecolor('white')
         
-        # Angles - start from top, go clockwise
-        angles = np.array([-np.pi/2, 0, np.pi/2, np.pi])
+        # KEY: Use evenly spaced angles around the full circle
+        num_vars = 4
+        angles = np.linspace(0, 2 * np.pi, num_vars, endpoint=False).tolist()
+        
+        # Close the polygon
         values_closed = values + [values[0]]
-        angles_closed = np.append(angles, angles[0])
+        angles_closed = angles + [angles[0]]
+        
+        # Set theta offset so Self-Readiness is at the top, clockwise direction
+        ax.set_theta_offset(np.pi / 2)
+        ax.set_theta_direction(-1)
         
         # Grid
         ax.set_ylim(0, 6)
@@ -103,28 +109,23 @@ class ReportGenerator:
         ax.set_xticks(angles)
         ax.set_xticklabels([])
         
-        # Add custom labels with larger font, positioned further out
-        label_distance = 7.8
+        # Add custom labels
+        label_distance = 7.2
         for i, (ind, colour) in enumerate(zip(indicators, indicator_colours)):
             angle = angles[i]
             if i == 0:  # Top
-                ax.text(angle, label_distance, ind, ha='center', va='bottom', 
-                       fontsize=13, fontweight='bold', color=colour)
+                ha, va = 'center', 'bottom'
             elif i == 1:  # Right
-                ax.text(angle, label_distance, ind, ha='left', va='center',
-                       fontsize=13, fontweight='bold', color=colour)
+                ha, va = 'left', 'center'
             elif i == 2:  # Bottom
-                ax.text(angle, label_distance, ind, ha='center', va='top',
-                       fontsize=13, fontweight='bold', color=colour)
+                ha, va = 'center', 'top'
             else:  # Left
-                ax.text(angle, label_distance, ind, ha='right', va='center',
-                       fontsize=13, fontweight='bold', color=colour)
+                ha, va = 'right', 'center'
+            ax.text(angle, label_distance, ind, ha=ha, va=va, fontsize=12, fontweight='bold', color=colour)
         
         ax.spines['polar'].set_visible(False)
         
-        # Save with extra padding to prevent cropping
-        plt.savefig(output_path, dpi=150, bbox_inches='tight', facecolor='white',
-                   edgecolor='none', pad_inches=0.5)
+        plt.savefig(output_path, dpi=150, bbox_inches='tight', facecolor='white', pad_inches=0.3)
         plt.close()
     
     def _create_comparison_radar_chart(self, pre_scores: dict, post_scores: dict, output_path: str):
@@ -137,10 +138,18 @@ class ReportGenerator:
         ax = fig.add_subplot(111, polar=True)
         fig.patch.set_facecolor('white')
         
-        angles = np.array([-np.pi/2, 0, np.pi/2, np.pi])
+        # KEY: Use evenly spaced angles around the full circle
+        num_vars = 4
+        angles = np.linspace(0, 2 * np.pi, num_vars, endpoint=False).tolist()
+        
+        # Close the polygons
         pre_closed = pre_values + [pre_values[0]]
         post_closed = post_values + [post_values[0]]
-        angles_closed = np.append(angles, angles[0])
+        angles_closed = angles + [angles[0]]
+        
+        # Set theta offset so Self-Readiness is at the top, clockwise direction
+        ax.set_theta_offset(np.pi / 2)
+        ax.set_theta_direction(-1)
         
         ax.set_ylim(0, 6)
         ax.set_yticks([1, 2, 3, 4, 5, 6])
@@ -164,21 +173,19 @@ class ReportGenerator:
         ax.set_xticks(angles)
         ax.set_xticklabels([])
         
-        label_distance = 7.8
+        # Add custom labels
+        label_distance = 7.2
         for i, (ind, colour) in enumerate(zip(indicators, indicator_colours)):
             angle = angles[i]
-            if i == 0:
-                ax.text(angle, label_distance, ind, ha='center', va='bottom',
-                       fontsize=13, fontweight='bold', color=colour)
-            elif i == 1:
-                ax.text(angle, label_distance, ind, ha='left', va='center',
-                       fontsize=13, fontweight='bold', color=colour)
-            elif i == 2:
-                ax.text(angle, label_distance, ind, ha='center', va='top',
-                       fontsize=13, fontweight='bold', color=colour)
-            else:
-                ax.text(angle, label_distance, ind, ha='right', va='center',
-                       fontsize=13, fontweight='bold', color=colour)
+            if i == 0:  # Top
+                ha, va = 'center', 'bottom'
+            elif i == 1:  # Right
+                ha, va = 'left', 'center'
+            elif i == 2:  # Bottom
+                ha, va = 'center', 'top'
+            else:  # Left
+                ha, va = 'right', 'center'
+            ax.text(angle, label_distance, ind, ha=ha, va=va, fontsize=12, fontweight='bold', color=colour)
         
         # Legend
         from matplotlib.lines import Line2D
@@ -190,8 +197,7 @@ class ReportGenerator:
                  fontsize=11, frameon=False)
         
         ax.spines['polar'].set_visible(False)
-        plt.savefig(output_path, dpi=150, bbox_inches='tight', facecolor='white',
-                   edgecolor='none', pad_inches=0.5)
+        plt.savefig(output_path, dpi=150, bbox_inches='tight', facecolor='white', pad_inches=0.3)
         plt.close()
     
     def _create_bar_chart(self, score: float, colour_hex: str, output_path: str):
