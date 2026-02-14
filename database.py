@@ -171,6 +171,21 @@ class Database:
             )
         ''')
         
+        # Email log table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS email_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                participant_id INTEGER NOT NULL,
+                email_type TEXT NOT NULL,
+                recipient_email TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'sent',
+                status_code INTEGER DEFAULT 0,
+                error_message TEXT,
+                sent_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (participant_id) REFERENCES participants (id)
+            )
+        ''')
+        
         conn.commit()
         conn.close()
     
@@ -250,6 +265,8 @@ class Database:
                 cursor.execute('DELETE FROM open_responses WHERE assessment_id = ?', (a_id,))
             
             cursor.execute('DELETE FROM assessments WHERE participant_id = ?', (p_id,))
+            # Clean up email log for this participant
+            cursor.execute('DELETE FROM email_log WHERE participant_id = ?', (p_id,))
         
         cursor.execute('DELETE FROM participants WHERE cohort_id = ?', (cohort_id,))
         cursor.execute('DELETE FROM cohorts WHERE id = ?', (cohort_id,))
@@ -336,6 +353,7 @@ class Database:
             cursor.execute('DELETE FROM open_responses WHERE assessment_id = ?', (a_id,))
         
         cursor.execute('DELETE FROM assessments WHERE participant_id = ?', (participant_id,))
+        cursor.execute('DELETE FROM email_log WHERE participant_id = ?', (participant_id,))
         cursor.execute('DELETE FROM participants WHERE id = ?', (participant_id,))
         
         conn.commit()
@@ -479,6 +497,57 @@ class Database:
             (assessment_id,)
         )
         return {r['question_number']: r['response_text'] for r in rows}
+    
+    # =========== EMAIL LOG OPERATIONS ===========
+    
+    def log_email(self, participant_id, email_type, recipient_email,
+                  status='sent', status_code=0, error_message=None):
+        """Log an email send attempt."""
+        conn, cursor = self._execute(
+            '''INSERT INTO email_log (participant_id, email_type, recipient_email, status, status_code, error_message)
+               VALUES (?, ?, ?, ?, ?, ?)''',
+            (participant_id, email_type, recipient_email, status, status_code, error_message)
+        )
+        conn.commit()
+        conn.close()
+    
+    def get_email_log(self, cohort_id=None, participant_id=None, limit=50):
+        """Get email send history, optionally filtered by cohort or participant."""
+        if participant_id:
+            return self._fetchall(
+                '''SELECT el.*, p.name as participant_name 
+                   FROM email_log el 
+                   JOIN participants p ON el.participant_id = p.id 
+                   WHERE el.participant_id = ? 
+                   ORDER BY el.sent_at DESC LIMIT ?''',
+                (participant_id, limit)
+            )
+        elif cohort_id:
+            return self._fetchall(
+                '''SELECT el.*, p.name as participant_name 
+                   FROM email_log el 
+                   JOIN participants p ON el.participant_id = p.id 
+                   WHERE p.cohort_id = ? 
+                   ORDER BY el.sent_at DESC LIMIT ?''',
+                (cohort_id, limit)
+            )
+        else:
+            return self._fetchall(
+                '''SELECT el.*, p.name as participant_name 
+                   FROM email_log el 
+                   JOIN participants p ON el.participant_id = p.id 
+                   ORDER BY el.sent_at DESC LIMIT ?''',
+                (limit,)
+            )
+    
+    def get_last_email_for_participant(self, participant_id, email_type):
+        """Get the most recent email of a given type for a participant."""
+        return self._fetchone(
+            '''SELECT * FROM email_log 
+               WHERE participant_id = ? AND email_type = ? AND status = 'sent' 
+               ORDER BY sent_at DESC LIMIT 1''',
+            (participant_id, email_type)
+        )
     
     # =========== REPORTING QUERIES ===========
     
