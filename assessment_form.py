@@ -133,12 +133,9 @@ def show_assessment(db, token: str):
     
     st.divider()
     
-    # Initialize session state for tracking which sliders have been moved
-    if 'sliders_moved' not in st.session_state:
-        st.session_state.sliders_moved = set()
-    
-    if 'confirmed_unchanged' not in st.session_state:
-        st.session_state.confirmed_unchanged = False
+    # Initialize session state for tracking review
+    if 'reviewed_low_scores' not in st.session_state:
+        st.session_state.reviewed_low_scores = False
     
     # Assessment form
     with st.form("assessment_form"):
@@ -239,12 +236,6 @@ def show_assessment(db, token: str):
         
         st.divider()
         
-        # Confirmation checkbox for unchanged ratings
-        confirm_unchanged = st.checkbox(
-            "I confirm I have reviewed all my responses and they are correct",
-            key="confirm_checkbox"
-        )
-        
         # Submit button
         submitted = st.form_submit_button("Submit Assessment", type="primary", use_container_width=True)
         
@@ -252,16 +243,24 @@ def show_assessment(db, token: str):
             # Check for ratings still at 1 (potentially unchanged)
             unchanged_items = [num for num, score in ratings.items() if score == 1]
             
-            if unchanged_items and not confirm_unchanged:
-                # Show warning about potentially unchanged items
+            if unchanged_items and not st.session_state.reviewed_low_scores:
+                # Set the flag — they must submit AGAIN to confirm
+                st.session_state.reviewed_low_scores = True
+                
+                item_list = ""
+                for num in unchanged_items:
+                    item_list += f"  - **Item {num}:** {ITEMS[num]['text']}\n"
+                
                 st.warning(f"""
-                ⚠️ **Please review your responses**
-                
-                The following questions are rated as '1 - Strongly Disagree': **{', '.join(str(i) for i in unchanged_items)}**
-                
-                If these ratings are intentional, please tick the confirmation box above and submit again.
-                
-                If you meant to rate them differently, please adjust your responses before submitting.
+⚠️ **Please review before submitting**
+
+You have **{len(unchanged_items)}** item{'s' if len(unchanged_items) > 1 else ''} rated as **1 — Strongly Disagree**:
+
+{item_list}
+
+If these are correct, **click Submit Assessment again** to confirm.
+
+If you meant to rate them differently, adjust your responses above first.
                 """)
             else:
                 # Save ratings
@@ -272,6 +271,9 @@ def show_assessment(db, token: str):
                 
                 # Mark as completed
                 db.mark_assessment_completed(token)
+                
+                # Clear the review flag
+                st.session_state.reviewed_low_scores = False
                 
                 st.success("Thank you! Your assessment has been submitted successfully.")
                 st.balloons()
