@@ -494,6 +494,122 @@ class ReportGenerator:
                 scores[focus] = 0
         return scores
     
+    # =========== APPENDIX ===========
+    
+    def _add_appendix(self, doc):
+        """Add appendix page with rating scale definitions and focus area descriptions."""
+        doc.add_page_break()
+        
+        heading = doc.add_paragraph()
+        run = heading.add_run("Appendix")
+        run.bold = True
+        run.font.size = Pt(14)
+        run.font.color.rgb = COLOURS_RGB['purple']
+        
+        # Rating scale
+        sub = doc.add_paragraph()
+        run = sub.add_run("Rating Scale")
+        run.bold = True
+        run.font.size = Pt(11)
+        run.font.color.rgb = COLOURS_RGB['purple']
+        
+        scale_intro = doc.add_paragraph()
+        run = scale_intro.add_run("All statements are rated on a 6-point agreement scale:")
+        run.font.size = Pt(9)
+        run.font.color.rgb = COLOURS_RGB['mid_grey']
+        
+        doc.add_paragraph()
+        scale_table = self._create_styled_table(doc, ["Score", "Label", "Interpretation"])
+        
+        scale_data = [
+            ("1", "Strongly Disagree", "This is not true for me at all — a clear development priority"),
+            ("2", "Disagree", "I don't feel this applies to me yet — needs focused attention"),
+            ("3", "Slightly Disagree", "I'm starting to develop here but not yet confident"),
+            ("4", "Slightly Agree", "I'm building capability — some evidence but room to grow"),
+            ("5", "Agree", "This is generally true for me — a developing strength"),
+            ("6", "Strongly Agree", "This is consistently true for me — a clear strength"),
+        ]
+        
+        scale_col_widths = [720, 1800, 6480]
+        # Apply widths to header
+        for i, w in enumerate(scale_col_widths):
+            cell = scale_table.rows[0].cells[i]
+            cell.width = w
+            tc = cell._tc
+            tcPr = tc.get_or_add_tcPr()
+            tcW = OxmlElement('w:tcW')
+            tcW.set(qn('w:w'), str(w))
+            tcW.set(qn('w:type'), 'dxa')
+            tcPr.append(tcW)
+        
+        for idx, (score, label, interp) in enumerate(scale_data):
+            self._add_table_row(
+                scale_table, [score, label, interp], idx,
+                [WD_ALIGN_PARAGRAPH.CENTER, WD_ALIGN_PARAGRAPH.LEFT, WD_ALIGN_PARAGRAPH.LEFT],
+                col_widths=scale_col_widths
+            )
+        
+        # Focus areas
+        doc.add_paragraph()
+        doc.add_paragraph()
+        sub = doc.add_paragraph()
+        run = sub.add_run("Focus Areas (BACK)")
+        run.bold = True
+        run.font.size = Pt(11)
+        run.font.color.rgb = COLOURS_RGB['purple']
+        
+        focus_intro = doc.add_paragraph()
+        run = focus_intro.add_run("Each of the 32 statements measures one of four focus areas. "
+                                  "Together they give a rounded picture of readiness:")
+        run.font.size = Pt(9)
+        run.font.color.rgb = COLOURS_RGB['mid_grey']
+        
+        doc.add_paragraph()
+        focus_table = self._create_styled_table(doc, ["Focus", "What It Measures", "Example"])
+        
+        focus_data = [
+            ("Behaviour", 
+             "Observable actions, habits and practices — what you actually do day to day",
+             "\"I delegate tasks appropriately rather than taking on too much myself\""),
+            ("Awareness", 
+             "Recognition of your own patterns, triggers, impact on others and development needs",
+             "\"I recognise how my behaviour changes when I am under pressure\""),
+            ("Confidence", 
+             "Self-belief, comfort in capability, and willingness to step into challenging situations",
+             "\"I feel equipped to handle common people management situations\""),
+            ("Knowledge", 
+             "Understanding of concepts, processes, frameworks and how to apply them",
+             "\"I understand how to match my delegation approach to the individual and the task\""),
+        ]
+        
+        focus_col_widths = [1080, 3960, 3960]
+        for i, w in enumerate(focus_col_widths):
+            cell = focus_table.rows[0].cells[i]
+            cell.width = w
+            tc = cell._tc
+            tcPr = tc.get_or_add_tcPr()
+            tcW = OxmlElement('w:tcW')
+            tcW.set(qn('w:w'), str(w))
+            tcW.set(qn('w:type'), 'dxa')
+            tcPr.append(tcW)
+        
+        for idx, (focus, desc, example) in enumerate(focus_data):
+            self._add_table_row(
+                focus_table, [focus, desc, example], idx,
+                [WD_ALIGN_PARAGRAPH.CENTER, WD_ALIGN_PARAGRAPH.LEFT, WD_ALIGN_PARAGRAPH.LEFT],
+                col_widths=focus_col_widths
+            )
+        
+        # Closing note
+        doc.add_paragraph()
+        note = doc.add_paragraph()
+        run = note.add_run("The Readiness Framework was developed by The Development Catalyst "
+                          "to measure launch readiness across the dimensions that matter most "
+                          "for new leaders and managers.")
+        run.italic = True
+        run.font.size = Pt(8)
+        run.font.color.rgb = COLOURS_RGB['mid_grey']
+    
     # =========== BASELINE REPORT ===========
     
     def generate_baseline_report(self, participant_id: int) -> io.BytesIO:
@@ -680,7 +796,19 @@ class ReportGenerator:
                     run.font.size = Pt(9)
                     run.font.name = 'Arial'
         
-        # Detailed scores by indicator with bar charts
+        # Score interpretation key
+        doc.add_paragraph()
+        key_para = doc.add_paragraph()
+        key_para.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        run = key_para.add_run("Reading your scores:  ")
+        run.bold = True
+        run.font.size = Pt(8)
+        run.font.color.rgb = COLOURS_RGB['dark_grey']
+        run.font.name = 'Arial'
+        run = key_para.add_run("1\u20132 = Development Priority    3\u20134 = Building    5\u20136 = Strength")
+        run.font.size = Pt(8)
+        run.font.color.rgb = COLOURS_RGB['mid_grey']
+        run.font.name = 'Arial'
         for indicator, (start, end) in INDICATORS.items():
             colour_name = INDICATOR_COLOUR_MAP.get(indicator, 'purple')
             colour_hex = COLOURS_HEX[colour_name]
@@ -809,6 +937,9 @@ class ReportGenerator:
         run.italic = True
         run.font.color.rgb = COLOURS_RGB['mid_grey']
         run.font.size = Pt(9)
+        
+        # Appendix
+        self._add_appendix(doc)
         
         # Save to buffer
         buffer = io.BytesIO()
@@ -998,6 +1129,19 @@ class ReportGenerator:
         run.italic = True
         run.font.size = Pt(8)
         run.font.color.rgb = COLOURS_RGB['mid_grey']
+        
+        # Score interpretation key
+        key_para = doc.add_paragraph()
+        key_para.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        run = key_para.add_run("Reading your scores:  ")
+        run.bold = True
+        run.font.size = Pt(8)
+        run.font.color.rgb = COLOURS_RGB['dark_grey']
+        run.font.name = 'Arial'
+        run = key_para.add_run("1\u20132 = Development Priority    3\u20134 = Building    5\u20136 = Strength")
+        run.font.size = Pt(8)
+        run.font.color.rgb = COLOURS_RGB['mid_grey']
+        run.font.name = 'Arial'
         
         # ===== GROWTH HIGHLIGHTS =====
         doc.add_page_break()
@@ -1267,6 +1411,9 @@ class ReportGenerator:
         run.italic = True
         run.font.color.rgb = COLOURS_RGB['mid_grey']
         run.font.size = Pt(9)
+        
+        # Appendix
+        self._add_appendix(doc)
         
         # Save
         buffer = io.BytesIO()
@@ -1543,6 +1690,9 @@ class ReportGenerator:
         run.italic = True
         run.font.color.rgb = COLOURS_RGB['mid_grey']
         run.font.size = Pt(9)
+        
+        # Appendix
+        self._add_appendix(doc)
         
         # Save
         buffer = io.BytesIO()
