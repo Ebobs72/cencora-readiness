@@ -1,57 +1,24 @@
 """
 load_test_data.py — Loads a full synthetic test cohort into the Cencora database.
 
-Upload this file to your GitHub repo alongside app.py, database.py etc.
-This version auto-detects your database schema so it works regardless
-of column naming.
+Matches the actual schema:
+  cohorts (AUTOINCREMENT id)
+  participants (cohort_id FK) 
+  assessments (participant_id FK, assessment_type, access_token, completed_at)
+  ratings (assessment_id FK, item_number, score)
+  open_responses (assessment_id FK, question_number, response_text)
 """
 
 import random
+import secrets
 from datetime import datetime, timedelta
-import uuid
-
-
-def get_table_columns(cursor, table_name):
-    """Get actual column names from a table."""
-    try:
-        cursor.execute(f"PRAGMA table_info({table_name})")
-        rows = cursor.fetchall()
-        columns = []
-        for row in rows:
-            if isinstance(row, dict):
-                columns.append(row.get('name', row.get('Name', '')))
-            elif isinstance(row, (list, tuple)):
-                columns.append(row[1])
-            else:
-                columns.append(str(row))
-        return columns
-    except Exception:
-        return []
-
-
-def find_column(columns, candidates):
-    """Find the first matching column name from a list of candidates."""
-    for candidate in candidates:
-        if candidate in columns:
-            return candidate
-    # Fuzzy match
-    for col in columns:
-        for candidate in candidates:
-            if candidate.replace('_', '') in col.replace('_', '').lower():
-                return col
-    return None
 
 
 def load_test_cohort(db):
-    """
-    Load a complete test cohort into the database.
-    Auto-detects column names to match your schema.
-    """
+    """Load a complete test cohort with PRE and POST data."""
     
     random.seed(42)
     
-    COHORT_NAME = "Test Cohort - Wave 1"
-    COHORT_ID = "test-cohort-wave1"
     PRE_DATE = datetime(2025, 11, 14)
     POST_DATE = datetime(2026, 2, 12)
     
@@ -121,33 +88,25 @@ def load_test_cohort(db):
         },
     }
     
+    # Item-to-indicator mapping
     item_indicators = {}
+    for i in range(1, 7): item_indicators[i] = "Self"
+    for i in range(7, 15): item_indicators[i] = "Practical"
+    for i in range(15, 23): item_indicators[i] = "Professional"
+    for i in range(23, 31): item_indicators[i] = "Team"
+    for i in range(31, 33): item_indicators[i] = "Overall"
+    
     item_focus = {}
-    for i in range(1, 7):
-        item_indicators[i] = "Self"
-    for i in range(7, 15):
-        item_indicators[i] = "Practical"
-    for i in range(15, 23):
-        item_indicators[i] = "Professional"
-    for i in range(23, 31):
-        item_indicators[i] = "Team"
-    for i in range(31, 33):
-        item_indicators[i] = "Overall"
-    
-    focus_pattern_6 = ["Knowledge", "Knowledge", "Awareness", "Awareness", "Confidence", "Behaviour"]
-    focus_pattern_8 = ["Knowledge", "Knowledge", "Awareness", "Awareness", "Confidence", "Confidence", "Behaviour", "Behaviour"]
-    
-    for i in range(1, 7):
-        item_focus[i] = focus_pattern_6[i - 1]
-    for i in range(7, 15):
-        item_focus[i] = focus_pattern_8[i - 7]
-    for i in range(15, 23):
-        item_focus[i] = focus_pattern_8[i - 15]
-    for i in range(23, 31):
-        item_focus[i] = focus_pattern_8[i - 23]
+    focus6 = ["Knowledge", "Knowledge", "Awareness", "Awareness", "Confidence", "Behaviour"]
+    focus8 = ["Knowledge", "Knowledge", "Awareness", "Awareness", "Confidence", "Confidence", "Behaviour", "Behaviour"]
+    for i in range(1, 7): item_focus[i] = focus6[i - 1]
+    for i in range(7, 15): item_focus[i] = focus8[i - 7]
+    for i in range(15, 23): item_focus[i] = focus8[i - 15]
+    for i in range(23, 31): item_focus[i] = focus8[i - 23]
     item_focus[31] = "Confidence"
     item_focus[32] = "Confidence"
     
+    # Open-ended responses
     pre_responses = {
         "Sarah Mitchell": [
             "Building something from the ground up - I've always inherited teams so this feels like a real opportunity to shape things from day one.",
@@ -279,88 +238,89 @@ def load_test_cohort(db):
         score = base + noise
         if focus == "Confidence":
             score -= 0.3
-            if is_post:
-                growth += 0.2
+            if is_post: growth += 0.2
         elif focus == "Knowledge":
             score += 0.2
         if is_post:
             score += growth + random.gauss(0, 0.4)
         return max(1, min(6, round(score)))
     
-    # ── Connect and discover schema ──
+    # ── Remove any previous test data ──
+    # We tag test cohorts with a recognisable name
     
     conn = db.get_connection()
     cursor = conn.cursor()
     
-    # Discover actual column names
-    ratings_cols = get_table_columns(cursor, 'ratings')
-    open_cols = get_table_columns(cursor, 'open_responses')
-    participants_cols = get_table_columns(cursor, 'participants')
-    
-    # Find the right column names in each table
-    r_pid = find_column(ratings_cols, ['participant_id', 'participant', 'user_id', 'respondent_id'])
-    r_item = find_column(ratings_cols, ['item_number', 'item_num', 'item', 'question_number'])
-    r_score = find_column(ratings_cols, ['score', 'rating', 'value'])
-    r_type = find_column(ratings_cols, ['assessment_type', 'type', 'phase'])
-    r_date = find_column(ratings_cols, ['created_at', 'timestamp', 'date', 'submitted_at'])
-    
-    o_pid = find_column(open_cols, ['participant_id', 'participant', 'user_id', 'respondent_id'])
-    o_qnum = find_column(open_cols, ['question_number', 'question_num', 'question', 'q_number'])
-    o_text = find_column(open_cols, ['response_text', 'response', 'text', 'answer'])
-    o_type = find_column(open_cols, ['assessment_type', 'type', 'phase'])
-    o_date = find_column(open_cols, ['created_at', 'timestamp', 'date', 'submitted_at'])
-    
-    p_cohort = find_column(participants_cols, ['cohort_id', 'cohort'])
-    p_pre_token = find_column(participants_cols, ['pre_token'])
-    p_post_token = find_column(participants_cols, ['post_token'])
-    p_pre_done = find_column(participants_cols, ['pre_completed', 'pre_complete'])
-    p_post_done = find_column(participants_cols, ['post_completed', 'post_complete'])
-    
-    if not r_pid:
-        raise Exception(f"Cannot find participant column in ratings. Columns: {ratings_cols}")
-    if not o_pid:
-        raise Exception(f"Cannot find participant column in open_responses. Columns: {open_cols}")
-    
-    # ── Clean up previous test data ──
-    
-    cursor.execute(f"DELETE FROM open_responses WHERE {o_pid} LIKE 'test-p%'")
-    cursor.execute(f"DELETE FROM ratings WHERE {r_pid} LIKE 'test-p%'")
-    cursor.execute(f"DELETE FROM participants WHERE {p_cohort} = 'test-cohort-wave1'")
-    cursor.execute("DELETE FROM cohorts WHERE id = 'test-cohort-wave1'")
+    # Find and delete any existing test cohort
+    cursor.execute("SELECT id FROM cohorts WHERE name = 'Test Cohort - Wave 1'")
+    existing = cursor.fetchall()
+    for row in existing:
+        cohort_id_to_delete = row[0] if isinstance(row, (list, tuple)) else row['id']
+        # Get participants
+        cursor.execute("SELECT id FROM participants WHERE cohort_id = ?", (cohort_id_to_delete,))
+        old_participants = cursor.fetchall()
+        for op in old_participants:
+            op_id = op[0] if isinstance(op, (list, tuple)) else op['id']
+            # Get assessments
+            cursor.execute("SELECT id FROM assessments WHERE participant_id = ?", (op_id,))
+            old_assessments = cursor.fetchall()
+            for oa in old_assessments:
+                oa_id = oa[0] if isinstance(oa, (list, tuple)) else oa['id']
+                cursor.execute("DELETE FROM ratings WHERE assessment_id = ?", (oa_id,))
+                cursor.execute("DELETE FROM open_responses WHERE assessment_id = ?", (oa_id,))
+            cursor.execute("DELETE FROM assessments WHERE participant_id = ?", (op_id,))
+        cursor.execute("DELETE FROM participants WHERE cohort_id = ?", (cohort_id_to_delete,))
+        cursor.execute("DELETE FROM cohorts WHERE id = ?", (cohort_id_to_delete,))
     conn.commit()
     
-    # ── Insert cohort ──
+    # ── Create cohort (AUTOINCREMENT id) ──
     
     cursor.execute(
-        "INSERT INTO cohorts (id, name, created_at) VALUES (?, ?, ?)",
-        (COHORT_ID, COHORT_NAME, PRE_DATE.isoformat())
+        "INSERT INTO cohorts (name, programme, description, start_date, end_date) VALUES (?, ?, ?, ?, ?)",
+        ("Test Cohort - Wave 1", "Launch Readiness", "Synthetic test data for report testing",
+         PRE_DATE.strftime("%Y-%m-%d"), POST_DATE.strftime("%Y-%m-%d"))
     )
+    conn.commit()
+    cohort_id = cursor.lastrowid
     
-    # ── Insert participants ──
-    
-    participant_ids = {}
-    for i, p in enumerate(participants):
-        pid = f"test-p{i+1:02d}"
-        participant_ids[p["name"]] = pid
-        pre_token = uuid.uuid4().hex[:16]
-        post_token = uuid.uuid4().hex[:16]
-        
-        cursor.execute(
-            f"INSERT INTO participants (id, {p_cohort}, name, role, email, {p_pre_token}, {p_post_token}, {p_pre_done}, {p_post_done}) VALUES (?, ?, ?, ?, ?, ?, ?, 1, 1)",
-            (pid, COHORT_ID, p["name"], p["role"], p["email"], pre_token, post_token)
-        )
-    
-    # ── Insert ratings ──
+    # ── Create participants, assessments, ratings and responses ──
     
     ratings_count = 0
+    responses_count = 0
+    
     for p in participants:
         name = p["name"]
-        pid = participant_ids[name]
         profile = profiles[name]
         
-        pre_ts = (PRE_DATE + timedelta(hours=random.randint(9, 17), minutes=random.randint(0, 59))).isoformat()
-        post_ts = (POST_DATE + timedelta(hours=random.randint(9, 17), minutes=random.randint(0, 59))).isoformat()
+        # Create participant (AUTOINCREMENT id)
+        cursor.execute(
+            "INSERT INTO participants (cohort_id, name, email, role) VALUES (?, ?, ?, ?)",
+            (cohort_id, p["name"], p["email"], p["role"])
+        )
+        conn.commit()
+        participant_id = cursor.lastrowid
         
+        # Create PRE assessment
+        pre_token = secrets.token_urlsafe(32)
+        pre_ts = (PRE_DATE + timedelta(hours=random.randint(9, 17), minutes=random.randint(0, 59))).isoformat()
+        cursor.execute(
+            "INSERT INTO assessments (participant_id, assessment_type, access_token, started_at, completed_at) VALUES (?, 'PRE', ?, ?, ?)",
+            (participant_id, pre_token, pre_ts, pre_ts)
+        )
+        conn.commit()
+        pre_assessment_id = cursor.lastrowid
+        
+        # Create POST assessment
+        post_token = secrets.token_urlsafe(32)
+        post_ts = (POST_DATE + timedelta(hours=random.randint(9, 17), minutes=random.randint(0, 59))).isoformat()
+        cursor.execute(
+            "INSERT INTO assessments (participant_id, assessment_type, access_token, started_at, completed_at) VALUES (?, 'POST', ?, ?, ?)",
+            (participant_id, post_token, post_ts, post_ts)
+        )
+        conn.commit()
+        post_assessment_id = cursor.lastrowid
+        
+        # Generate and insert ratings for all 32 items
         for item_num in range(1, 33):
             indicator = item_indicators[item_num]
             focus = item_focus[item_num]
@@ -373,43 +333,35 @@ def load_test_cohort(db):
                 post_score = pre_score + 3
             
             cursor.execute(
-                f"INSERT INTO ratings ({r_pid}, {r_item}, {r_score}, {r_type}, {r_date}) VALUES (?, ?, ?, 'PRE', ?)",
-                (pid, item_num, pre_score, pre_ts)
+                "INSERT INTO ratings (assessment_id, item_number, score) VALUES (?, ?, ?)",
+                (pre_assessment_id, item_num, pre_score)
             )
             cursor.execute(
-                f"INSERT INTO ratings ({r_pid}, {r_item}, {r_score}, {r_type}, {r_date}) VALUES (?, ?, ?, 'POST', ?)",
-                (pid, item_num, post_score, post_ts)
+                "INSERT INTO ratings (assessment_id, item_number, score) VALUES (?, ?, ?)",
+                (post_assessment_id, item_num, post_score)
             )
             ratings_count += 2
-    
-    # ── Insert open responses ──
-    
-    responses_count = 0
-    for p in participants:
-        name = p["name"]
-        pid = participant_ids[name]
         
-        pre_ts = (PRE_DATE + timedelta(hours=random.randint(9, 17), minutes=random.randint(0, 59))).isoformat()
-        post_ts = (POST_DATE + timedelta(hours=random.randint(9, 17), minutes=random.randint(0, 59))).isoformat()
-        
+        # Insert open responses
         for q_num, response in enumerate(pre_responses[name], 1):
             cursor.execute(
-                f"INSERT INTO open_responses ({o_pid}, {o_qnum}, {o_text}, {o_type}, {o_date}) VALUES (?, ?, ?, 'PRE', ?)",
-                (pid, q_num, response, pre_ts)
+                "INSERT INTO open_responses (assessment_id, question_number, response_text) VALUES (?, ?, ?)",
+                (pre_assessment_id, q_num, response)
             )
             responses_count += 1
         
         for q_num, response in enumerate(post_responses[name], 1):
             cursor.execute(
-                f"INSERT INTO open_responses ({o_pid}, {o_qnum}, {o_text}, {o_type}, {o_date}) VALUES (?, ?, ?, 'POST', ?)",
-                (pid, q_num, response, post_ts)
+                "INSERT INTO open_responses (assessment_id, question_number, response_text) VALUES (?, ?, ?)",
+                (post_assessment_id, q_num, response)
             )
             responses_count += 1
     
     conn.commit()
+    conn.close()
     
     return {
-        "cohort": COHORT_NAME,
+        "cohort": "Test Cohort - Wave 1",
         "participants": len(participants),
         "ratings": ratings_count,
         "open_responses": responses_count,
@@ -419,21 +371,29 @@ def load_test_cohort(db):
 
 
 def remove_test_cohort(db):
-    """Remove all test cohort data from the database."""
+    """Remove the test cohort and all related data."""
     conn = db.get_connection()
     cursor = conn.cursor()
     
-    ratings_cols = get_table_columns(cursor, 'ratings')
-    open_cols = get_table_columns(cursor, 'open_responses')
-    participants_cols = get_table_columns(cursor, 'participants')
+    cursor.execute("SELECT id FROM cohorts WHERE name = 'Test Cohort - Wave 1'")
+    cohorts = cursor.fetchall()
     
-    r_pid = find_column(ratings_cols, ['participant_id', 'participant', 'user_id']) or 'participant_id'
-    o_pid = find_column(open_cols, ['participant_id', 'participant', 'user_id']) or 'participant_id'
-    p_cohort = find_column(participants_cols, ['cohort_id', 'cohort']) or 'cohort_id'
+    for row in cohorts:
+        cohort_id = row[0] if isinstance(row, (list, tuple)) else row['id']
+        cursor.execute("SELECT id FROM participants WHERE cohort_id = ?", (cohort_id,))
+        parts = cursor.fetchall()
+        for p in parts:
+            p_id = p[0] if isinstance(p, (list, tuple)) else p['id']
+            cursor.execute("SELECT id FROM assessments WHERE participant_id = ?", (p_id,))
+            assmnts = cursor.fetchall()
+            for a in assmnts:
+                a_id = a[0] if isinstance(a, (list, tuple)) else a['id']
+                cursor.execute("DELETE FROM ratings WHERE assessment_id = ?", (a_id,))
+                cursor.execute("DELETE FROM open_responses WHERE assessment_id = ?", (a_id,))
+            cursor.execute("DELETE FROM assessments WHERE participant_id = ?", (p_id,))
+        cursor.execute("DELETE FROM participants WHERE cohort_id = ?", (cohort_id,))
+        cursor.execute("DELETE FROM cohorts WHERE id = ?", (cohort_id,))
     
-    cursor.execute(f"DELETE FROM open_responses WHERE {o_pid} LIKE 'test-p%'")
-    cursor.execute(f"DELETE FROM ratings WHERE {r_pid} LIKE 'test-p%'")
-    cursor.execute(f"DELETE FROM participants WHERE {p_cohort} = 'test-cohort-wave1'")
-    cursor.execute("DELETE FROM cohorts WHERE id = 'test-cohort-wave1'")
     conn.commit()
+    conn.close()
     return True
