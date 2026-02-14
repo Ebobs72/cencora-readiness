@@ -114,7 +114,7 @@ class ReportGenerator:
         fig, ax = plt.subplots(figsize=(5.5, 5.5), subplot_kw=dict(polar=True))
         fig.patch.set_facecolor('white')
         
-        # Angles - start from top (-90°), go clockwise
+        # Angles - start from top (-90), go clockwise
         angles = np.array([-np.pi/2, 0, np.pi/2, np.pi])
         
         # Close the polygon
@@ -801,7 +801,7 @@ class ReportGenerator:
             run.italic = True
             run.font.color.rgb = COLOURS_RGB['mid_grey']
             run.font.size = Pt(9)
-            desc.add_run(f"  |  Pre: {pre_avg:.1f} → Post: {post_avg:.1f} ")
+            desc.add_run(f"  |  Pre: {pre_avg:.1f} -> Post: {post_avg:.1f} ")
             change_run = desc.add_run(f"(+{change:.1f})" if change > 0 else f"({change:.1f})")
             change_run.bold = True
             if change > 0:
@@ -1093,7 +1093,7 @@ class ReportGenerator:
         themes = format_themes_for_report(takeaway_themes)
         if themes:
             for theme in themes:
-                doc.add_paragraph(f"• {theme}")
+                doc.add_paragraph(f"* {theme}")
         else:
             doc.add_paragraph("Manual review of responses recommended.")
         
@@ -1106,7 +1106,7 @@ class ReportGenerator:
         themes = format_themes_for_report(commitment_themes)
         if themes:
             for theme in themes:
-                doc.add_paragraph(f"• {theme}")
+                doc.add_paragraph(f"* {theme}")
         else:
             doc.add_paragraph("Manual review of responses recommended.")
         
