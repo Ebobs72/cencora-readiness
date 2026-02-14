@@ -249,8 +249,54 @@ def show_participant_management():
     st.divider()
     
     # Add new participant
-    st.subheader("Add Participant")
+    st.subheader("Add Participants")
     
+    # CSV bulk upload
+    with st.expander("📄 Bulk Upload from CSV"):
+        st.caption("Upload a CSV file with columns: **Name**, **Email**, **Role** (header row required)")
+        uploaded_csv = st.file_uploader("Choose CSV file", type=['csv'], key="csv_upload")
+        
+        if uploaded_csv is not None:
+            import csv
+            import io as csv_io
+            
+            content = uploaded_csv.read().decode('utf-8')
+            reader = csv.DictReader(csv_io.StringIO(content))
+            
+            # Normalise column headers (case-insensitive)
+            rows = []
+            for row in reader:
+                normalised = {k.strip().lower(): v.strip() for k, v in row.items()}
+                name = normalised.get('name', '')
+                email = normalised.get('email', '')
+                role = normalised.get('role', '')
+                if name:
+                    rows.append({'name': name, 'email': email, 'role': role})
+            
+            if rows:
+                st.write(f"Found **{len(rows)}** participants:")
+                for r in rows:
+                    st.write(f"  • {r['name']} — {r['email'] or 'no email'} — {r['role'] or 'no role'}")
+                
+                if st.button(f"✅ Add {len(rows)} Participants", type="primary", key="bulk_add"):
+                    added = 0
+                    for r in rows:
+                        try:
+                            db.create_participant(
+                                cohort_id=selected_cohort_id,
+                                name=r['name'],
+                                email=r['email'],
+                                role=r['role']
+                            )
+                            added += 1
+                        except Exception as e:
+                            st.warning(f"Skipped {r['name']}: {e}")
+                    st.success(f"Added {added} participants!")
+                    st.rerun()
+            else:
+                st.warning("No valid rows found. Make sure your CSV has a 'Name' column.")
+    
+    # Single participant add
     with st.form("new_participant"):
         col1, col2, col3 = st.columns(3)
         with col1:
@@ -284,15 +330,94 @@ def show_participant_management():
         st.info("No participants in this cohort yet.")
         return
     
-    # Get base URL for assessment links
+    # ── Email Actions ──────────────────────────
+    from email_sender import is_email_configured, send_assessment_email, send_reminder_email
+    
+    # Get base URL
     try:
-        # Try to get the actual app URL
         base_url = st.secrets.get("app", {}).get("base_url", "")
     except:
         base_url = ""
-    
     if not base_url:
         base_url = "https://your-app-url.streamlit.app"
+    
+    if is_email_configured():
+        st.subheader("📧 Email Actions")
+        
+        # Calculate who needs what
+        need_pre = [p for p in participants if not p.get('pre_completed') and p.get('email')]
+        need_post = [p for p in participants if p.get('pre_completed') and not p.get('post_completed') and p.get('email')]
+        pre_incomplete = [p for p in participants if not p.get('pre_completed') and p.get('email')]
+        post_incomplete = [p for p in participants if p.get('pre_completed') and not p.get('post_completed') and p.get('email')]
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            if need_pre:
+                if st.button(f"📨 Send PRE Links ({len(need_pre)})", type="primary"):
+                    sent = 0
+                    for p in need_pre:
+                        success, msg = send_assessment_email(p, 'PRE', base_url, db)
+                        if success:
+                            sent += 1
+                        else:
+                            st.warning(f"{p['name']}: {msg}")
+                    st.success(f"Sent {sent} PRE assessment invitations!")
+            else:
+                st.write("✅ All PRE links sent or completed")
+        
+        with col2:
+            if need_post:
+                if st.button(f"📨 Send POST Links ({len(need_post)})"):
+                    sent = 0
+                    for p in need_post:
+                        success, msg = send_assessment_email(p, 'POST', base_url, db)
+                        if success:
+                            sent += 1
+                        else:
+                            st.warning(f"{p['name']}: {msg}")
+                    st.success(f"Sent {sent} POST assessment invitations!")
+            else:
+                st.write("✅ All POST links sent or completed")
+        
+        with col3:
+            incomplete = pre_incomplete + post_incomplete
+            if incomplete:
+                if st.button(f"🔔 Send Reminders ({len(incomplete)})"):
+                    sent = 0
+                    for p in pre_incomplete:
+                        success, msg = send_reminder_email(p, 'PRE', base_url, db)
+                        if success:
+                            sent += 1
+                    for p in post_incomplete:
+                        success, msg = send_reminder_email(p, 'POST', base_url, db)
+                        if success:
+                            sent += 1
+                    st.success(f"Sent {sent} reminders!")
+            else:
+                st.write("✅ All assessments complete")
+        
+        # Email log
+        with st.expander("📋 Email Log"):
+            log = db.get_email_log(cohort_id=selected_cohort_id, limit=20)
+            if log:
+                for entry in log:
+                    status_icon = "✅" if entry['status'] == 'sent' else "❌"
+                    st.write(f"{status_icon} **{entry['participant_name']}** — {entry['email_type']} — {entry['recipient_email']} — {entry['sent_at'][:16]}")
+            else:
+                st.caption("No emails sent yet for this cohort.")
+        
+        st.divider()
+    else:
+        with st.expander("📧 Email Setup (not configured)"):
+            st.info("To enable email sending, add SendGrid credentials to your Streamlit secrets:")
+            st.code("""[sendgrid]
+api_key = "SG.your-api-key-here"
+sender_email = "readiness@yourdomain.com"
+sender_name = "The Development Catalyst"
+""", language="toml")
+            st.caption("Sign up for a free SendGrid account at sendgrid.com (100 emails/day free)")
+        st.divider()
     
     for p in participants:
         pre_status = "✅" if p.get('pre_completed') else "⏳"
