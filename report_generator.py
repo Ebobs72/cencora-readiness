@@ -69,7 +69,7 @@ INDICATOR_COLOUR_MAP = {
 # 5-col: #, Statement, Focus, Bar, Score  (total ~9000 twips for A4 content area)
 COL_WIDTHS_5 = [504, 5040, 1152, 1296, 792]   # 0.35", 3.5", 0.8", 0.9", 0.55"
 # 7-col: #, Statement, Focus, Pre, Post, Bar, Change (Progress report)
-COL_WIDTHS_7 = [432, 3312, 864, 576, 576, 1152, 720]  # totals ~7632
+COL_WIDTHS_7 = [432, 4320, 1008, 576, 576, 1296, 792]  # totals 9000 (matches baseline width)
 # Logo path - multiple fallback locations for different environments
 def get_logo_path():
     """Get the logo path, checking multiple locations for compatibility."""
@@ -262,21 +262,23 @@ class ReportGenerator:
     
     def _create_comparison_bar_chart(self, pre_score: float, post_score: float, 
                                      colour_hex: str, output_path: str, max_score: int = 6):
-        """Create a comparison bar (pre dashed outline, post filled)."""
+        """Create a stacked comparison bar (pre grey on top, post coloured below)."""
         
-        fig, ax = plt.subplots(figsize=(1.5, 0.25))
+        fig, ax = plt.subplots(figsize=(1.5, 0.5))
         fig.patch.set_facecolor('white')
         
-        # Background
-        ax.barh(0, max_score, color='#E8E8E8', height=0.8)
-        # POST bar (filled)
-        ax.barh(0, post_score, color=colour_hex, height=0.8)
-        # PRE bar (outline only)
-        ax.barh(0, pre_score, color='none', edgecolor='#888888',
-               linewidth=2, linestyle='--', height=0.8)
+        bar_height = 0.35
+        
+        # PRE bar (top) - light grey
+        ax.barh(0.22, max_score, color='#E8E8E8', height=bar_height)
+        ax.barh(0.22, pre_score, color='#B0B0B0', height=bar_height)
+        
+        # POST bar (bottom) - indicator colour
+        ax.barh(-0.22, max_score, color='#E8E8E8', height=bar_height)
+        ax.barh(-0.22, post_score, color=colour_hex, height=bar_height)
         
         ax.set_xlim(0, max_score)
-        ax.set_ylim(-0.5, 0.5)
+        ax.set_ylim(-0.55, 0.55)
         ax.axis('off')
         
         plt.savefig(output_path, dpi=100, bbox_inches='tight', facecolor='white',
@@ -932,7 +934,7 @@ class ReportGenerator:
         
         # Cohort note
         note = doc.add_paragraph()
-        run = note.add_run("Cohort = Average of all participants  |  Bar shows Pre (dashed) vs Post (solid)")
+        run = note.add_run("Cohort = Average of all participants  |  Bar: grey = Pre, coloured = Post")
         run.italic = True
         run.font.size = Pt(8)
         run.font.color.rgb = COLOURS_RGB['mid_grey']
