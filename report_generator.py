@@ -47,7 +47,7 @@ INDICATOR_COLOUR_MAP = {
 }
 
 # Column widths for 5-column item tables (in inches) - matching sample
-COL_WIDTHS_5 = [0.28, 4.05, 1.04, 0.83, 1.04]
+COL_WIDTHS_5 = [0.3, 4.5, 0.9, 0.6, 0.5]
 
 
 class ReportGenerator:
@@ -753,7 +753,7 @@ class ReportGenerator:
             table = doc.add_table(rows=1, cols=6)
             table.style = 'Table Grid'
             headers = ["#", "Statement", "Pre", "Post", "", "Chg"]
-            col_widths = [0.28, 3.5, 0.5, 0.5, 0.7, 0.5]
+            col_widths = [0.3, 4, 0.45, 0.45, 0.55, 0.45]
             for i, h in enumerate(headers):
                 table.rows[0].cells[i].text = h
                 self._set_cell_shading(table.rows[0].cells[i], colour_hex.replace('#', ''))
