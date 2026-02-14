@@ -1,21 +1,17 @@
 #!/usr/bin/env python3
 """
 Report generator for Launch Readiness assessments.
-
 Generates three types of reports:
 1. Baseline Report (PRE assessment only)
 2. Progress Report (PRE vs POST comparison)
 3. Impact Report (Cohort summary)
-
 All reports use Cencora branding and house style.
 """
-
 import io
 import os
 import tempfile
 from datetime import datetime
 from pathlib import Path
-
 from docx import Document
 from docx.shared import Inches, Pt, Cm, RGBColor, Twips
 from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -23,20 +19,16 @@ from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.enum.section import WD_ORIENT
 from docx.oxml.ns import qn, nsmap
 from docx.oxml import OxmlElement
-
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
-
 from framework import (
     INDICATORS, INDICATOR_DESCRIPTIONS, INDICATOR_COLOURS,
     ITEMS, OPEN_QUESTIONS_PRE, OPEN_QUESTIONS_POST, RATING_SCALE,
     FOCUS_TAGS, get_items_for_indicator, get_items_by_focus
 )
 from theme_extractor import ThemeExtractor, format_themes_for_report
-
-
 # Cencora brand colours (hex for matplotlib, RGB for docx)
 COLOURS_HEX = {
     'purple': '#461E96',
@@ -52,7 +44,6 @@ COLOURS_HEX = {
     'success_green': '#2E7D32',
     'white': '#FFFFFF'
 }
-
 COLOURS_RGB = {
     'purple': RGBColor(0x46, 0x1E, 0x96),
     'cyan': RGBColor(0x00, 0xB4, 0xE6),
@@ -67,24 +58,24 @@ COLOURS_RGB = {
     'success_green': RGBColor(0x2E, 0x7D, 0x32),
     'white': RGBColor(0xFF, 0xFF, 0xFF)
 }
-
 INDICATOR_COLOUR_MAP = {
     'Self-Readiness': 'purple',
     'Practical Readiness': 'cyan',
     'Professional Readiness': 'magenta',
     'Team Readiness': 'green'
 }
-
 # Logo path - multiple fallback locations for different environments
 def get_logo_path():
     """Get the logo path, checking multiple locations for compatibility."""
     # Current file's directory
     current_dir = Path(__file__).parent
     
-    # Possible locations
+    # Possible locations (includes Streamlit Cloud mount path)
     candidates = [
         current_dir / 'assets' / 'cencora_logo.png',  # Standard location
         current_dir / 'cencora_logo.png',              # Root of app
+        Path('/mount/src/cencora-readiness/assets/cencora_logo.png'),  # Streamlit Cloud
+        Path('/mount/src/cencora-readiness/cencora_logo.png'),         # Streamlit Cloud alt
         Path('assets') / 'cencora_logo.png',           # Relative to cwd
         Path('cencora_logo.png'),                      # Current directory
     ]
@@ -94,8 +85,6 @@ def get_logo_path():
             return path
     
     return None
-
-
 class ReportGenerator:
     def __init__(self, db):
         self.db = db
@@ -105,17 +94,23 @@ class ReportGenerator:
     # =========== CHART GENERATION ===========
     
     def _create_radar_chart(self, scores: dict, output_path: str):
-        """Create a 4-axis radar chart matching the approved sample style."""
+        """Create a 4-axis radar chart matching the approved sample style.
+        
+        FIX: Uses np.linspace with theta_offset/direction instead of manual
+        angle array, which was only rendering one quadrant of the chart.
+        """
         
         indicators = list(INDICATORS.keys())
         values = [scores.get(ind, 0) for ind in indicators]
         
         # Chart setup
-        fig, ax = plt.subplots(figsize=(5.5, 5.5), subplot_kw=dict(polar=True))
+        fig, ax = plt.subplots(figsize=(6, 6), subplot_kw=dict(polar=True))
         fig.patch.set_facecolor('white')
         
-        # Angles - start from top (-90), go clockwise
-        angles = np.array([-np.pi/2, 0, np.pi/2, np.pi])
+        # Distribute angles evenly around full circle
+        angles = np.linspace(0, 2 * np.pi, 4, endpoint=False)
+        ax.set_theta_offset(np.pi / 2)   # Self-Readiness at top (12 o'clock)
+        ax.set_theta_direction(-1)        # Clockwise order
         
         # Close the polygon
         values_closed = values + [values[0]]
@@ -124,57 +119,61 @@ class ReportGenerator:
         # Draw grid circles
         ax.set_ylim(0, 6)
         ax.set_yticks([1, 2, 3, 4, 5, 6])
-        ax.set_yticklabels(['1', '2', '3', '4', '5', '6'], fontsize=8, color='#888888')
-        ax.yaxis.grid(True, color='#E0E0E0', linewidth=1)
+        ax.set_yticklabels(['1', '2', '3', '4', '5', '6'], fontsize=9, color='#999999')
+        ax.set_rlabel_position(45)
+        ax.yaxis.grid(True, color='#E0E0E0', linewidth=0.8)
+        ax.xaxis.grid(True, color='#E0E0E0', linewidth=0.8)
         
         # Draw the data polygon
-        ax.fill(angles_closed, values_closed, color=COLOURS_HEX['purple'], alpha=0.2)
-        ax.plot(angles_closed, values_closed, color=COLOURS_HEX['purple'], linewidth=3)
+        ax.fill(angles_closed, values_closed, color=COLOURS_HEX['purple'], alpha=0.15)
+        ax.plot(angles_closed, values_closed, color=COLOURS_HEX['purple'], linewidth=2.5)
         
         # Draw data points with indicator colours
         indicator_colours = [COLOURS_HEX['purple'], COLOURS_HEX['cyan'], 
                            COLOURS_HEX['magenta'], COLOURS_HEX['green']]
         for angle, value, colour in zip(angles, values, indicator_colours):
-            ax.scatter(angle, value, color=colour, s=150, zorder=5, edgecolors='white', linewidths=2)
+            ax.scatter(angle, value, color=colour, s=120, zorder=5, edgecolors='white', linewidths=2)
         
         # Labels
         ax.set_xticks(angles)
         ax.set_xticklabels([])  # Remove default labels
         
         # Add custom positioned labels
+        label_distance = 7.8
+        alignments = [
+            ('center', 'bottom'),  # Top (Self-Readiness)
+            ('left', 'center'),    # Right (Practical Readiness)
+            ('center', 'top'),     # Bottom (Professional Readiness)
+            ('right', 'center'),   # Left (Team Readiness)
+        ]
         for i, (ind, colour) in enumerate(zip(indicators, indicator_colours)):
-            angle = angles[i]
-            if i == 0:  # Top
-                ax.text(angle, 7.5, ind, ha='center', va='bottom', fontsize=11, 
-                       fontweight='bold', color=colour)
-            elif i == 1:  # Right
-                ax.text(angle, 7.5, ind, ha='left', va='center', fontsize=11,
-                       fontweight='bold', color=colour)
-            elif i == 2:  # Bottom
-                ax.text(angle, 7.5, ind, ha='center', va='top', fontsize=11,
-                       fontweight='bold', color=colour)
-            else:  # Left
-                ax.text(angle, 7.5, ind, ha='right', va='center', fontsize=11,
-                       fontweight='bold', color=colour)
+            ha, va = alignments[i]
+            ax.text(angles[i], label_distance, ind, ha=ha, va=va,
+                    fontsize=12, fontweight='bold', color=colour)
         
         ax.spines['polar'].set_visible(False)
         
-        plt.tight_layout()
         plt.savefig(output_path, dpi=150, bbox_inches='tight', facecolor='white', 
-                   edgecolor='none', pad_inches=0.1)
+                   edgecolor='none', pad_inches=0.3)
         plt.close()
     
     def _create_comparison_radar_chart(self, pre_scores: dict, post_scores: dict, output_path: str):
-        """Create a comparison radar chart (pre dashed grey, post solid green)."""
+        """Create a comparison radar chart (pre dashed grey, post solid green).
+        
+        FIX: Same linspace fix as _create_radar_chart.
+        """
         
         indicators = list(INDICATORS.keys())
         pre_values = [pre_scores.get(ind, 0) for ind in indicators]
         post_values = [post_scores.get(ind, 0) for ind in indicators]
         
-        fig, ax = plt.subplots(figsize=(5.5, 5.5), subplot_kw=dict(polar=True))
+        fig, ax = plt.subplots(figsize=(6, 6), subplot_kw=dict(polar=True))
         fig.patch.set_facecolor('white')
         
-        angles = np.array([-np.pi/2, 0, np.pi/2, np.pi])
+        # Distribute angles evenly around full circle
+        angles = np.linspace(0, 2 * np.pi, 4, endpoint=False)
+        ax.set_theta_offset(np.pi / 2)   # Self-Readiness at top
+        ax.set_theta_direction(-1)        # Clockwise
         
         pre_closed = pre_values + [pre_values[0]]
         post_closed = post_values + [post_values[0]]
@@ -182,16 +181,18 @@ class ReportGenerator:
         
         ax.set_ylim(0, 6)
         ax.set_yticks([1, 2, 3, 4, 5, 6])
-        ax.set_yticklabels(['1', '2', '3', '4', '5', '6'], fontsize=8, color='#888888')
-        ax.yaxis.grid(True, color='#E0E0E0', linewidth=1)
+        ax.set_yticklabels(['1', '2', '3', '4', '5', '6'], fontsize=9, color='#999999')
+        ax.set_rlabel_position(45)
+        ax.yaxis.grid(True, color='#E0E0E0', linewidth=0.8)
+        ax.xaxis.grid(True, color='#E0E0E0', linewidth=0.8)
         
         # PRE polygon (dashed, grey)
         ax.fill(angles_closed, pre_closed, color='#999999', alpha=0.1)
         ax.plot(angles_closed, pre_closed, color='#999999', linewidth=2, linestyle='--')
         
         # POST polygon (solid, green)
-        ax.fill(angles_closed, post_closed, color=COLOURS_HEX['green'], alpha=0.2)
-        ax.plot(angles_closed, post_closed, color=COLOURS_HEX['green'], linewidth=3)
+        ax.fill(angles_closed, post_closed, color=COLOURS_HEX['green'], alpha=0.15)
+        ax.plot(angles_closed, post_closed, color=COLOURS_HEX['green'], linewidth=2.5)
         
         # Points
         indicator_colours = [COLOURS_HEX['purple'], COLOURS_HEX['cyan'],
@@ -201,41 +202,37 @@ class ReportGenerator:
             # PRE point (smaller, grey)
             ax.scatter(angle, pre_val, color='#999999', s=60, zorder=4, edgecolors='white', linewidths=1)
             # POST point (larger, coloured)
-            ax.scatter(angle, post_val, color=colour, s=150, zorder=5, edgecolors='white', linewidths=2)
+            ax.scatter(angle, post_val, color=colour, s=120, zorder=5, edgecolors='white', linewidths=2)
         
         ax.set_xticks(angles)
         ax.set_xticklabels([])
         
+        # Custom positioned labels
+        label_distance = 7.8
+        alignments = [
+            ('center', 'bottom'),
+            ('left', 'center'),
+            ('center', 'top'),
+            ('right', 'center'),
+        ]
         for i, (ind, colour) in enumerate(zip(indicators, indicator_colours)):
-            angle = angles[i]
-            if i == 0:
-                ax.text(angle, 7.5, ind, ha='center', va='bottom', fontsize=11,
-                       fontweight='bold', color=colour)
-            elif i == 1:
-                ax.text(angle, 7.5, ind, ha='left', va='center', fontsize=11,
-                       fontweight='bold', color=colour)
-            elif i == 2:
-                ax.text(angle, 7.5, ind, ha='center', va='top', fontsize=11,
-                       fontweight='bold', color=colour)
-            else:
-                ax.text(angle, 7.5, ind, ha='right', va='center', fontsize=11,
-                       fontweight='bold', color=colour)
+            ha, va = alignments[i]
+            ax.text(angles[i], label_distance, ind, ha=ha, va=va,
+                    fontsize=12, fontweight='bold', color=colour)
         
         # Legend
-        from matplotlib.patches import Patch
         from matplotlib.lines import Line2D
         legend_elements = [
             Line2D([0], [0], color='#999999', linestyle='--', linewidth=2, label='Pre-Programme'),
-            Line2D([0], [0], color=COLOURS_HEX['green'], linewidth=3, label='Post-Programme')
+            Line2D([0], [0], color=COLOURS_HEX['green'], linewidth=2.5, label='Post-Programme')
         ]
         ax.legend(handles=legend_elements, loc='lower left', bbox_to_anchor=(-0.1, -0.15), 
                  fontsize=9, frameon=False)
         
         ax.spines['polar'].set_visible(False)
         
-        plt.tight_layout()
         plt.savefig(output_path, dpi=150, bbox_inches='tight', facecolor='white',
-                   edgecolor='none', pad_inches=0.1)
+                   edgecolor='none', pad_inches=0.3)
         plt.close()
     
     def _create_bar_chart(self, score: float, colour_hex: str, output_path: str, max_score: int = 6):
@@ -490,7 +487,7 @@ class ReportGenerator:
             para = doc.add_paragraph()
             para.alignment = WD_ALIGN_PARAGRAPH.CENTER
             run = para.add_run()
-            run.add_picture(tmp.name, width=Inches(4.0))
+            run.add_picture(tmp.name, width=Inches(4.5))
         
         # Scale note
         scale_para = doc.add_paragraph()
@@ -739,7 +736,7 @@ class ReportGenerator:
             para = doc.add_paragraph()
             para.alignment = WD_ALIGN_PARAGRAPH.CENTER
             run = para.add_run()
-            run.add_picture(tmp.name, width=Inches(4.0))
+            run.add_picture(tmp.name, width=Inches(4.5))
         
         # Summary table
         doc.add_paragraph()
@@ -1033,7 +1030,7 @@ class ReportGenerator:
             para = doc.add_paragraph()
             para.alignment = WD_ALIGN_PARAGRAPH.CENTER
             run = para.add_run()
-            run.add_picture(tmp.name, width=Inches(4.0))
+            run.add_picture(tmp.name, width=Inches(4.5))
         
         doc.add_paragraph()
         results_table = self._create_styled_table(doc, ["Indicator", "Pre", "Post", "Change"])
