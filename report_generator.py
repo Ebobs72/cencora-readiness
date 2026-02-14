@@ -64,6 +64,12 @@ INDICATOR_COLOUR_MAP = {
     'Professional Readiness': 'magenta',
     'Team Readiness': 'green'
 }
+
+# Column widths for item detail tables (in twips: 1440 twips = 1 inch)
+# 5-col: #, Statement, Focus, Bar, Score  (total ~9000 twips for A4 content area)
+COL_WIDTHS_5 = [504, 5040, 1152, 1296, 792]   # 0.35", 3.5", 0.8", 0.9", 0.55"
+# 7-col: #, Statement, Focus, Pre, Post, Bar, Change (Progress report)
+COL_WIDTHS_7 = [432, 3312, 864, 576, 576, 1152, 720]  # totals ~7632
 # Logo path - multiple fallback locations for different environments
 def get_logo_path():
     """Get the logo path, checking multiple locations for compatibility."""
@@ -301,18 +307,30 @@ class ReportGenerator:
     def _add_logo_header(self, doc):
         """Add Cencora logo to document header on all pages."""
         if self.logo_path and self.logo_path.exists():
-            section = doc.sections[0]
-            header = section.header
-            header_para = header.paragraphs[0] if header.paragraphs else header.add_paragraph()
-            header_para.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-            run = header_para.add_run()
-            # Logo width of 1.5 inches for good visibility
-            run.add_picture(str(self.logo_path), width=Inches(1.5))
+            try:
+                section = doc.sections[0]
+                header = section.header
+                header_para = header.paragraphs[0] if header.paragraphs else header.add_paragraph()
+                header_para.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+                run = header_para.add_run()
+                # Logo width of 1.5 inches for good visibility
+                run.add_picture(str(self.logo_path), width=Inches(1.5))
+            except Exception:
+                pass  # Skip logo if image is unreadable
     
-    def _create_styled_table(self, doc, headers: list, header_colour_hex: str = '461E96'):
-        """Create a table with styled header row."""
+    def _create_styled_table(self, doc, headers: list, header_colour_hex: str = '461E96',
+                             col_widths: list = None):
+        """Create a table with styled header row and optional fixed column widths."""
         table = doc.add_table(rows=1, cols=len(headers))
         table.style = 'Table Grid'
+        
+        # Set fixed layout to enforce column widths
+        if col_widths:
+            tbl = table._tbl
+            tblPr = tbl.tblPr if tbl.tblPr is not None else OxmlElement('w:tblPr')
+            tblLayout = OxmlElement('w:tblLayout')
+            tblLayout.set(qn('w:type'), 'fixed')
+            tblPr.append(tblLayout)
         
         # Style header row
         header_row = table.rows[0]
@@ -321,6 +339,17 @@ class ReportGenerator:
             cell.text = header_text
             self._set_cell_shading(cell, header_colour_hex)
             self._set_cell_margins(cell)
+            
+            # Set column width
+            if col_widths and i < len(col_widths):
+                cell.width = col_widths[i]
+                tc = cell._tc
+                tcPr = tc.get_or_add_tcPr()
+                tcW = OxmlElement('w:tcW')
+                tcW.set(qn('w:w'), str(col_widths[i]))
+                tcW.set(qn('w:type'), 'dxa')
+                tcPr.append(tcW)
+            
             for para in cell.paragraphs:
                 para.alignment = WD_ALIGN_PARAGRAPH.CENTER
                 for run in para.runs:
@@ -332,13 +361,24 @@ class ReportGenerator:
         return table
     
     def _add_table_row(self, table, values: list, row_index: int, 
-                       alignments: list = None, bar_image_path: str = None, bar_col: int = None):
+                       alignments: list = None, bar_image_path: str = None, bar_col: int = None,
+                       col_widths: list = None):
         """Add a data row with alternating colours and optional bar chart."""
         row = table.add_row()
         bg_colour = 'FFFFFF' if row_index % 2 == 0 else 'FDF6E3'
         
         for i, value in enumerate(values):
             cell = row.cells[i]
+            
+            # Enforce column width on data rows too
+            if col_widths and i < len(col_widths):
+                cell.width = col_widths[i]
+                tc = cell._tc
+                tcPr = tc.get_or_add_tcPr()
+                tcW = OxmlElement('w:tcW')
+                tcW.set(qn('w:w'), str(col_widths[i]))
+                tcW.set(qn('w:type'), 'dxa')
+                tcPr.append(tcW)
             
             # Check if this cell should have a bar image
             if bar_image_path and i == bar_col:
@@ -547,7 +587,8 @@ class ReportGenerator:
             # Items table with bar charts
             items_table = self._create_styled_table(
                 doc, ["#", "Statement", "Focus", "", "Score"],
-                colour_hex.replace('#', '')
+                colour_hex.replace('#', ''),
+                col_widths=COL_WIDTHS_5
             )
             
             for idx, item_num in enumerate(range(start, end + 1)):
@@ -565,7 +606,8 @@ class ReportGenerator:
                          WD_ALIGN_PARAGRAPH.CENTER, WD_ALIGN_PARAGRAPH.CENTER,
                          WD_ALIGN_PARAGRAPH.CENTER],
                         bar_image_path=tmp.name,
-                        bar_col=3
+                        bar_col=3,
+                        col_widths=COL_WIDTHS_5
                     )
             
             doc.add_paragraph()
@@ -577,7 +619,8 @@ class ReportGenerator:
         run.font.size = Pt(12)
         run.font.color.rgb = COLOURS_RGB['purple']
         
-        overall_table = self._create_styled_table(doc, ["#", "Statement", "Focus", "", "Score"])
+        overall_table = self._create_styled_table(doc, ["#", "Statement", "Focus", "", "Score"],
+                                                    col_widths=COL_WIDTHS_5)
         
         for idx, item_num in enumerate([31, 32]):
             item = ITEMS[item_num]
@@ -593,7 +636,8 @@ class ReportGenerator:
                      WD_ALIGN_PARAGRAPH.CENTER, WD_ALIGN_PARAGRAPH.CENTER,
                      WD_ALIGN_PARAGRAPH.CENTER],
                     bar_image_path=tmp.name,
-                    bar_col=3
+                    bar_col=3,
+                    col_widths=COL_WIDTHS_5
                 )
         
         # Page break before reflections
@@ -606,19 +650,35 @@ class ReportGenerator:
         run.font.size = Pt(14)
         run.font.color.rgb = COLOURS_RGB['purple']
         
+        intro = doc.add_paragraph()
+        run = intro.add_run("Your responses to the open questions before the programme:")
+        run.italic = True
+        run.font.size = Pt(9)
+        run.font.color.rgb = COLOURS_RGB['mid_grey']
+        
         for q_num, question in OPEN_QUESTIONS_PRE.items():
-            q_para = doc.add_paragraph()
-            run = q_para.add_run(question)
-            run.bold = True
-            run.font.size = Pt(10)
+            # Question in a shaded box
+            q_table = doc.add_table(rows=1, cols=1)
+            q_table.style = 'Table Grid'
+            q_cell = q_table.rows[0].cells[0]
+            q_cell.text = question
+            self._set_cell_shading(q_cell, 'F5F5F5')
+            self._set_cell_margins(q_cell, 80, 80, 120, 120)
+            for para in q_cell.paragraphs:
+                for run in para.runs:
+                    run.bold = True
+                    run.font.size = Pt(10)
+                    run.font.name = 'Arial'
+                    run.font.color.rgb = COLOURS_RGB['purple']
             
+            # Response
             response = pre_responses.get(q_num, "No response provided")
             r_para = doc.add_paragraph()
             run = r_para.add_run(response)
             run.italic = True
             run.font.size = Pt(10)
-            
-            doc.add_paragraph()
+            run.font.name = 'Arial'
+            r_para.paragraph_format.space_after = Pt(12)
         
         # Closing note
         doc.add_paragraph()
@@ -807,7 +867,8 @@ class ReportGenerator:
             # Items table
             items_table = self._create_styled_table(
                 doc, ["#", "Statement", "Focus", "Pre", "Post", "", "Change"],
-                colour_hex.replace('#', '')
+                colour_hex.replace('#', ''),
+                col_widths=COL_WIDTHS_7
             )
             
             for idx, item_num in enumerate(range(start, end + 1)):
@@ -828,7 +889,8 @@ class ReportGenerator:
                          WD_ALIGN_PARAGRAPH.CENTER, WD_ALIGN_PARAGRAPH.CENTER,
                          WD_ALIGN_PARAGRAPH.CENTER],
                         bar_image_path=tmp.name,
-                        bar_col=5
+                        bar_col=5,
+                        col_widths=COL_WIDTHS_7
                     )
             
             doc.add_paragraph()
@@ -843,10 +905,26 @@ class ReportGenerator:
         run.font.size = Pt(14)
         run.font.color.rgb = COLOURS_RGB['purple']
         
+        intro = doc.add_paragraph()
+        run = intro.add_run("Your responses to the open questions after the programme:")
+        run.italic = True
+        run.font.size = Pt(9)
+        run.font.color.rgb = COLOURS_RGB['mid_grey']
+        
         for q_num, question in OPEN_QUESTIONS_POST.items():
-            q_para = doc.add_paragraph()
-            run = q_para.add_run(question)
-            run.bold = True
+            # Question in a shaded box
+            q_table = doc.add_table(rows=1, cols=1)
+            q_table.style = 'Table Grid'
+            q_cell = q_table.rows[0].cells[0]
+            q_cell.text = question
+            self._set_cell_shading(q_cell, 'F5F5F5')
+            self._set_cell_margins(q_cell, 80, 80, 120, 120)
+            for para in q_cell.paragraphs:
+                for run in para.runs:
+                    run.bold = True
+                    run.font.size = Pt(10)
+                    run.font.name = 'Arial'
+                    run.font.color.rgb = COLOURS_RGB['purple']
             
             # For Q3, show original concern
             if q_num == 3:
@@ -864,8 +942,9 @@ class ReportGenerator:
             r_para = doc.add_paragraph()
             run = r_para.add_run(response)
             run.italic = True
-            
-            doc.add_paragraph()
+            run.font.size = Pt(10)
+            run.font.name = 'Arial'
+            r_para.paragraph_format.space_after = Pt(12)
         
         # Closing
         closing = doc.add_paragraph()
