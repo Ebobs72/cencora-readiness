@@ -14,6 +14,7 @@ from framework import (
     INDICATORS, INDICATOR_DESCRIPTIONS, INDICATOR_COLOURS,
     ITEMS, OPEN_QUESTIONS_PRE, OPEN_QUESTIONS_POST, RATING_SCALE
 )
+from load_test_data import load_test_cohort, remove_test_cohort
 
 # Page configuration
 st.set_page_config(
@@ -489,6 +490,35 @@ def show_settings():
         for indicator, (start, end) in INDICATORS.items():
             st.write(f"**{indicator}** (Items {start}-{end})")
             st.caption(INDICATOR_DESCRIPTIONS.get(indicator, ""))
+    
+    st.divider()
+    
+    # ── Test Data Management ──────────────────────────
+    st.subheader("Test Data")
+    st.caption("Load a synthetic cohort of 12 participants with complete PRE and POST data for testing reports. This won't affect any real participant data.")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("🧪 Load Test Cohort", type="primary"):
+            try:
+                result = load_test_cohort(db)
+                st.success(
+                    f"✅ Loaded **{result['participants']} participants** with "
+                    f"**{result['ratings']} ratings** and **{result['open_responses']} open responses**.\n\n"
+                    f"PRE dates: {result['pre_date']}  |  POST dates: {result['post_date']}\n\n"
+                    f"Go to **Generate Reports** to test Baseline, Progress and Impact reports!"
+                )
+                st.rerun()
+            except Exception as e:
+                st.error(f"Error loading test data: {e}")
+    with col2:
+        if st.button("🗑️ Remove Test Cohort"):
+            try:
+                remove_test_cohort(db)
+                st.success("✅ Test data removed. All real participant data is untouched.")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Error removing test data: {e}")
 
 
 def show_assessment_form(token: str):
