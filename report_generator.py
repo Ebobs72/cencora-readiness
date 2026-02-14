@@ -69,7 +69,7 @@ INDICATOR_COLOUR_MAP = {
 # 5-col: #, Statement, Focus, Bar, Score  (total ~9000 twips for A4 content area)
 COL_WIDTHS_5 = [504, 5040, 1152, 1296, 792]   # 0.35", 3.5", 0.8", 0.9", 0.55"
 # 7-col: #, Statement, Focus, Pre, Post, Bar, Change (Progress report)
-COL_WIDTHS_7 = [432, 4320, 1008, 576, 576, 1296, 792]  # totals 9000 (matches baseline width)
+COL_WIDTHS_7 = [432, 4032, 1296, 576, 576, 1296, 792]  # totals 9000 (Focus now 0.9")
 # Logo path - multiple fallback locations for different environments
 def get_logo_path():
     """Get the logo path, checking multiple locations for compatibility."""
@@ -939,6 +939,118 @@ class ReportGenerator:
         run.font.size = Pt(8)
         run.font.color.rgb = COLOURS_RGB['mid_grey']
         
+        # ===== GROWTH HIGHLIGHTS =====
+        doc.add_page_break()
+        
+        heading = doc.add_paragraph()
+        run = heading.add_run("Your Growth at a Glance")
+        run.bold = True
+        run.font.size = Pt(14)
+        run.font.color.rgb = COLOURS_RGB['purple']
+        
+        intro = doc.add_paragraph()
+        intro.add_run("Before diving into the detail, here is a summary of where you showed the "
+                      "biggest shifts and where there is still room to grow.")
+        
+        # Calculate item-level changes and sort
+        item_changes = []
+        for item_num in range(1, 33):
+            pre_score = pre_ratings.get(item_num, 0)
+            post_score = post_ratings.get(item_num, 0)
+            item_change = post_score - pre_score
+            item = ITEMS[item_num]
+            item_changes.append({
+                'num': item_num,
+                'text': item['text'],
+                'focus': item['focus'],
+                'pre': pre_score,
+                'post': post_score,
+                'change': item_change
+            })
+        
+        # Sort by change descending for biggest growth
+        sorted_by_growth = sorted(item_changes, key=lambda x: x['change'], reverse=True)
+        # Sort by post score ascending for areas to develop
+        sorted_by_post = sorted(item_changes, key=lambda x: x['post'])
+        
+        # Biggest Growth (top 5 items by change)
+        doc.add_paragraph()
+        sub = doc.add_paragraph()
+        run = sub.add_run("\u2B06  Your Biggest Growth Areas")
+        run.bold = True
+        run.font.size = Pt(11)
+        run.font.color.rgb = COLOURS_RGB['success_green']
+        
+        growth_table = self._create_styled_table(
+            doc, ["#", "Statement", "Pre", "Post", "Change"],
+            '2E7D32'  # success_green
+        )
+        growth_col_widths = [432, 5760, 864, 864, 1080]
+        # Apply widths to header
+        for i, w in enumerate(growth_col_widths):
+            cell = growth_table.rows[0].cells[i]
+            cell.width = w
+            tc = cell._tc
+            tcPr = tc.get_or_add_tcPr()
+            tcW = OxmlElement('w:tcW')
+            tcW.set(qn('w:w'), str(w))
+            tcW.set(qn('w:type'), 'dxa')
+            tcPr.append(tcW)
+        
+        for idx, item in enumerate(sorted_by_growth[:5]):
+            change_str = f"+{item['change']}" if item['change'] > 0 else str(item['change'])
+            self._add_table_row(
+                growth_table,
+                [str(item['num']), item['text'], str(item['pre']), str(item['post']), change_str],
+                idx,
+                [WD_ALIGN_PARAGRAPH.CENTER, WD_ALIGN_PARAGRAPH.LEFT,
+                 WD_ALIGN_PARAGRAPH.CENTER, WD_ALIGN_PARAGRAPH.CENTER,
+                 WD_ALIGN_PARAGRAPH.CENTER],
+                col_widths=growth_col_widths
+            )
+        
+        # Areas still to develop (lowest 5 post scores)
+        doc.add_paragraph()
+        sub = doc.add_paragraph()
+        run = sub.add_run("\u27A1  Areas for Continued Development")
+        run.bold = True
+        run.font.size = Pt(11)
+        run.font.color.rgb = COLOURS_RGB['orange']
+        
+        develop_intro = doc.add_paragraph()
+        run = develop_intro.add_run("These are the items where your post-programme scores were lowest. "
+                                    "They represent your best opportunities for continued growth.")
+        run.italic = True
+        run.font.size = Pt(9)
+        run.font.color.rgb = COLOURS_RGB['mid_grey']
+        
+        develop_table = self._create_styled_table(
+            doc, ["#", "Statement", "Pre", "Post", "Change"],
+            'FFA400'  # orange
+        )
+        # Apply widths to header
+        for i, w in enumerate(growth_col_widths):
+            cell = develop_table.rows[0].cells[i]
+            cell.width = w
+            tc = cell._tc
+            tcPr = tc.get_or_add_tcPr()
+            tcW = OxmlElement('w:tcW')
+            tcW.set(qn('w:w'), str(w))
+            tcW.set(qn('w:type'), 'dxa')
+            tcPr.append(tcW)
+        
+        for idx, item in enumerate(sorted_by_post[:5]):
+            change_str = f"+{item['change']}" if item['change'] > 0 else str(item['change'])
+            self._add_table_row(
+                develop_table,
+                [str(item['num']), item['text'], str(item['pre']), str(item['post']), change_str],
+                idx,
+                [WD_ALIGN_PARAGRAPH.CENTER, WD_ALIGN_PARAGRAPH.LEFT,
+                 WD_ALIGN_PARAGRAPH.CENTER, WD_ALIGN_PARAGRAPH.CENTER,
+                 WD_ALIGN_PARAGRAPH.CENTER],
+                col_widths=growth_col_widths
+            )
+        
         # ===== DETAILED COMPARISON BY INDICATOR =====
         # (Each indicator gets its own page)
         
@@ -1003,7 +1115,20 @@ class ReportGenerator:
             doc.add_paragraph()
             reflect_table = doc.add_table(rows=1, cols=1)
             reflect_table.style = 'Table Grid'
+            # Match width to the indicator table above (9000 twips)
+            tbl = reflect_table._tbl
+            tblPr = tbl.tblPr if tbl.tblPr is not None else OxmlElement('w:tblPr')
+            tblLayout = OxmlElement('w:tblLayout')
+            tblLayout.set(qn('w:type'), 'fixed')
+            tblPr.append(tblLayout)
             reflect_cell = reflect_table.rows[0].cells[0]
+            reflect_cell.width = 9000
+            tc = reflect_cell._tc
+            tcPr = tc.get_or_add_tcPr()
+            tcW = OxmlElement('w:tcW')
+            tcW.set(qn('w:w'), '9000')
+            tcW.set(qn('w:type'), 'dxa')
+            tcPr.append(tcW)
             self._set_cell_shading(reflect_cell, 'F5F5F5')
             self._set_cell_margins(reflect_cell, 100, 100, 150, 150)
             para = reflect_cell.paragraphs[0]
