@@ -339,7 +339,7 @@ def show_participant_management():
     except:
         base_url = ""
     if not base_url:
-        base_url = "https://your-app-url.streamlit.app"
+        base_url = "https://cencora-readiness.streamlit.app"
     
     if is_email_configured():
         st.subheader("📧 Email Actions")
@@ -410,16 +410,16 @@ def show_participant_management():
         st.divider()
     else:
         with st.expander("📧 Email Setup (not configured)"):
-            st.info("To enable email sending, add your Microsoft 365 credentials to Streamlit secrets:")
+            st.info("To enable email sending, add your SMTP credentials to Streamlit secrets:")
             st.code("""[email]
-smtp_server = "smtp.office365.com"
+smtp_server = "smtp-relay.brevo.com"
 smtp_port = 587
-username = "you@thedevelopmentcatalyst.co.uk"
-password = "your-app-password-here"
-sender_email = "you@thedevelopmentcatalyst.co.uk"
+username = "you@yourdomain.com"
+password = "your-brevo-smtp-key"
+sender_email = "you@yourdomain.com"
 sender_name = "The Development Catalyst"
 """, language="toml")
-            st.caption("You'll need to generate an App Password in your Microsoft account security settings (account.microsoft.com → Security → App passwords).")
+            st.caption("Sign up for a free Brevo account at brevo.com → SMTP & API → Generate SMTP key")
         st.divider()
     
     for p in participants:
@@ -457,6 +457,22 @@ sender_name = "The Development Catalyst"
                     db.delete_participant(p['id'])
                     st.success(f"Participant '{p['name']}' deleted.")
                     st.rerun()
+            with col2:
+                if is_email_configured() and p.get('email'):
+                    if not p.get('pre_completed'):
+                        if st.button("📨 Send PRE", key=f"send_pre_{p['id']}"):
+                            success, msg = send_assessment_email(p, 'PRE', base_url, db)
+                            if success:
+                                st.success(f"PRE link sent to {p['email']}")
+                            else:
+                                st.error(msg)
+                    elif not p.get('post_completed'):
+                        if st.button("📨 Send POST", key=f"send_post_{p['id']}"):
+                            success, msg = send_assessment_email(p, 'POST', base_url, db)
+                            if success:
+                                st.success(f"POST link sent to {p['email']}")
+                            else:
+                                st.error(msg)
 
 
 def show_report_generation():
