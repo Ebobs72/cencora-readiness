@@ -378,8 +378,7 @@ def show_report_generation():
         selected_id = participant_options[selected_name]
         
         if st.button("Generate Baseline Report", type="primary"):
-            with st.spinner("Generating report..."):
-                try:
+                with st.spinner("Generating report..."):
                     doc_buffer = report_gen.generate_baseline_report(selected_id)
                     st.download_button(
                         label="📥 Download Baseline Report",
@@ -388,8 +387,6 @@ def show_report_generation():
                         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                     )
                     st.success("Report generated successfully!")
-                except Exception as e:
-                    st.error(f"Error generating report: {e}")
     
     elif report_type == "Individual Progress (PRE vs POST)":
         st.subheader("Generate Progress Report")
