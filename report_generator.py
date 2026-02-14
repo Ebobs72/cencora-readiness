@@ -307,10 +307,12 @@ class ReportGenerator:
         tcPr.append(tcMar)
     
     def _add_logo_header(self, doc):
-        """Add Cencora logo to document header on all pages."""
+        """Add Cencora logo to document header and page numbers to footer on all pages."""
+        section = doc.sections[0]
+        
+        # Logo in header
         if self.logo_path and self.logo_path.exists():
             try:
-                section = doc.sections[0]
                 header = section.header
                 header_para = header.paragraphs[0] if header.paragraphs else header.add_paragraph()
                 header_para.alignment = WD_ALIGN_PARAGRAPH.RIGHT
@@ -319,6 +321,64 @@ class ReportGenerator:
                 run.add_picture(str(self.logo_path), width=Inches(1.5))
             except Exception:
                 pass  # Skip logo if image is unreadable
+        
+        # Page numbers in footer: "Page X of Y  |  The Development Catalyst  |  Confidential"
+        footer = section.footer
+        footer.is_linked_to_previous = False
+        footer_para = footer.paragraphs[0] if footer.paragraphs else footer.add_paragraph()
+        footer_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        
+        # "Page "
+        run = footer_para.add_run("Page ")
+        run.font.size = Pt(8)
+        run.font.color.rgb = COLOURS_RGB['mid_grey']
+        run.font.name = 'Arial'
+        
+        # Current page number field
+        fldChar1 = OxmlElement('w:fldChar')
+        fldChar1.set(qn('w:fldCharType'), 'begin')
+        run1 = footer_para.add_run()
+        run1._r.append(fldChar1)
+        
+        instrText = OxmlElement('w:instrText')
+        instrText.set(qn('xml:space'), 'preserve')
+        instrText.text = ' PAGE '
+        run2 = footer_para.add_run()
+        run2._r.append(instrText)
+        
+        fldChar2 = OxmlElement('w:fldChar')
+        fldChar2.set(qn('w:fldCharType'), 'end')
+        run3 = footer_para.add_run()
+        run3._r.append(fldChar2)
+        
+        # " of "
+        run = footer_para.add_run(" of ")
+        run.font.size = Pt(8)
+        run.font.color.rgb = COLOURS_RGB['mid_grey']
+        run.font.name = 'Arial'
+        
+        # Total pages field
+        fldChar3 = OxmlElement('w:fldChar')
+        fldChar3.set(qn('w:fldCharType'), 'begin')
+        run4 = footer_para.add_run()
+        run4._r.append(fldChar3)
+        
+        instrText2 = OxmlElement('w:instrText')
+        instrText2.set(qn('xml:space'), 'preserve')
+        instrText2.text = ' NUMPAGES '
+        run5 = footer_para.add_run()
+        run5._r.append(instrText2)
+        
+        fldChar4 = OxmlElement('w:fldChar')
+        fldChar4.set(qn('w:fldCharType'), 'end')
+        run6 = footer_para.add_run()
+        run6._r.append(fldChar4)
+        
+        # "  |  The Development Catalyst  |  Confidential"
+        run = footer_para.add_run("  |  The Development Catalyst  |  Confidential")
+        run.font.size = Pt(8)
+        run.font.color.rgb = COLOURS_RGB['mid_grey']
+        run.font.name = 'Arial'
     
     def _create_styled_table(self, doc, headers: list, header_colour_hex: str = '461E96',
                              col_widths: list = None):
