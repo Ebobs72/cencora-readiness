@@ -518,13 +518,14 @@ class ReportGenerator:
         details_para = doc.add_paragraph()
         details_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
         run = details_para.add_run(f"{cohort['name']}  |  Assessment: {pre_date}")
+        run.font.size = Pt(11)
+        run.font.color.rgb = COLOURS_RGB['mid_grey']
+        run.font.name = 'Arial'
+        
         gen_para = doc.add_paragraph()
         gen_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
         run = gen_para.add_run(f"Report generated: {datetime.now().strftime('%d %B %Y')}")
         run.font.size = Pt(10)
-        run.font.color.rgb = COLOURS_RGB['mid_grey']
-        run.font.name = 'Arial'
-        run.font.size = Pt(11)
         run.font.color.rgb = COLOURS_RGB['mid_grey']
         run.font.name = 'Arial'
         
@@ -794,42 +795,78 @@ class ReportGenerator:
         
         self._add_logo_header(doc)
         
-        # Title
+        # ===== COVER PAGE =====
+        for _ in range(6):
+            doc.add_paragraph()
+        
         title = doc.add_paragraph()
+        title.alignment = WD_ALIGN_PARAGRAPH.CENTER
         run = title.add_run("THE READINESS FRAMEWORK")
         run.bold = True
-        run.font.size = Pt(14)
+        run.font.size = Pt(28)
         run.font.color.rgb = COLOURS_RGB['purple']
+        run.font.name = 'Arial'
         
         subtitle = doc.add_paragraph()
+        subtitle.alignment = WD_ALIGN_PARAGRAPH.CENTER
         run = subtitle.add_run("Readiness Progress")
-        run.font.size = Pt(12)
+        run.font.size = Pt(18)
         run.font.color.rgb = COLOURS_RGB['magenta']
+        run.font.name = 'Arial'
         
-        # Participant info
-        info_table = doc.add_table(rows=4, cols=2)
-        info_table.style = 'Table Grid'
-        info_data = [
-            ("Participant:", participant['name']),
-            ("Role:", participant.get('role', 'Not specified')),
-            ("Pre-Assessment:", pre_date),
-            ("Post-Assessment:", post_date)
-        ]
-        for i, (label, value) in enumerate(info_data):
-            info_table.rows[i].cells[0].text = label
-            info_table.rows[i].cells[1].text = value
-            self._set_cell_shading(info_table.rows[i].cells[0], 'F5F5F5')
-            self._set_cell_margins(info_table.rows[i].cells[0])
-            self._set_cell_margins(info_table.rows[i].cells[1])
-            for cell in info_table.rows[i].cells:
-                for para in cell.paragraphs:
-                    for run in para.runs:
-                        run.font.size = Pt(10)
-                        if cell == info_table.rows[i].cells[0]:
-                            run.bold = True
-        
-        # Summary heading
         doc.add_paragraph()
+        line = doc.add_paragraph()
+        line.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run = line.add_run("━" * 40)
+        run.font.color.rgb = COLOURS_RGB['purple']
+        run.font.size = Pt(10)
+        
+        doc.add_paragraph()
+        
+        name_para = doc.add_paragraph()
+        name_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run = name_para.add_run(participant['name'])
+        run.bold = True
+        run.font.size = Pt(22)
+        run.font.color.rgb = COLOURS_RGB['dark_grey']
+        run.font.name = 'Arial'
+        
+        role_para = doc.add_paragraph()
+        role_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run = role_para.add_run(participant.get('role', ''))
+        run.font.size = Pt(14)
+        run.font.color.rgb = COLOURS_RGB['mid_grey']
+        run.font.name = 'Arial'
+        
+        doc.add_paragraph()
+        
+        details_para = doc.add_paragraph()
+        details_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run = details_para.add_run(f"{cohort['name']}  |  Pre: {pre_date}  |  Post: {post_date}")
+        run.font.size = Pt(11)
+        run.font.color.rgb = COLOURS_RGB['mid_grey']
+        run.font.name = 'Arial'
+        
+        gen_para = doc.add_paragraph()
+        gen_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run = gen_para.add_run(f"Report generated: {datetime.now().strftime('%d %B %Y')}")
+        run.font.size = Pt(10)
+        run.font.color.rgb = COLOURS_RGB['mid_grey']
+        run.font.name = 'Arial'
+        
+        for _ in range(4):
+            doc.add_paragraph()
+        conf_para = doc.add_paragraph()
+        conf_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run = conf_para.add_run("CONFIDENTIAL")
+        run.font.size = Pt(9)
+        run.font.color.rgb = COLOURS_RGB['mid_grey']
+        run.font.name = 'Arial'
+        run.bold = True
+        
+        # ===== PAGE 2: YOUR PROGRESS =====
+        doc.add_page_break()
+        
         heading = doc.add_paragraph()
         run = heading.add_run("Your Progress")
         run.bold = True
@@ -841,6 +878,12 @@ class ReportGenerator:
         intro.add_run(f"Congratulations, {participant['name'].split()[0]}! Your assessment shows meaningful "
                       f"growth across all four Readiness Indicators. Your overall readiness improved from "
                       f"{pre_overall:.1f} to {post_overall:.1f} (+{change:.1f}).")
+        
+        doc.add_paragraph()
+        intro2 = doc.add_paragraph()
+        intro2.add_run("The comparison radar chart below shows your pre-programme profile (dashed grey) "
+                       "alongside your post-programme profile (solid green), followed by detailed "
+                       "breakdowns for each indicator.")
         
         # Comparison radar chart
         doc.add_paragraph()
