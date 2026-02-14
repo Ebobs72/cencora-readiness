@@ -55,6 +55,10 @@ def _send_email(to_email, to_name, subject, html_content):
     msg['To'] = f"{to_name} <{to_email}>"
     msg['Subject'] = subject
     msg['Reply-To'] = config['sender_email']
+    # Disable Brevo link tracking so assessment URLs aren't wrapped
+    msg['X-Mailin-Tag'] = 'readiness-assessment'
+    msg['X-Mailin-Track'] = '0'
+    msg['X-Mailin-Track-Links'] = '0'
     
     msg.attach(MIMEText(html_content, 'html'))
     
