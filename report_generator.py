@@ -132,13 +132,13 @@ class ReportGenerator:
         
         # Draw the data polygon
         ax.fill(angles_closed, values_closed, color=COLOURS_HEX['purple'], alpha=0.15)
-        ax.plot(angles_closed, values_closed, color=COLOURS_HEX['purple'], linewidth=2.5)
+        ax.plot(angles_closed, values_closed, color=COLOURS_HEX['purple'], linewidth=3.5)
         
         # Draw data points with indicator colours
         indicator_colours = [COLOURS_HEX['purple'], COLOURS_HEX['cyan'], 
                            COLOURS_HEX['magenta'], COLOURS_HEX['green']]
         for angle, value, colour in zip(angles, values, indicator_colours):
-            ax.scatter(angle, value, color=colour, s=120, zorder=5, edgecolors='white', linewidths=2)
+            ax.scatter(angle, value, color=colour, s=200, zorder=5, edgecolors='white', linewidths=2)
         
         # Labels
         ax.set_xticks(angles)
@@ -194,11 +194,11 @@ class ReportGenerator:
         
         # PRE polygon (dashed, grey)
         ax.fill(angles_closed, pre_closed, color='#999999', alpha=0.1)
-        ax.plot(angles_closed, pre_closed, color='#999999', linewidth=2, linestyle='--')
+        ax.plot(angles_closed, pre_closed, color='#999999', linewidth=2.5, linestyle='--')
         
         # POST polygon (solid, green)
         ax.fill(angles_closed, post_closed, color=COLOURS_HEX['green'], alpha=0.15)
-        ax.plot(angles_closed, post_closed, color=COLOURS_HEX['green'], linewidth=2.5)
+        ax.plot(angles_closed, post_closed, color=COLOURS_HEX['green'], linewidth=3.5)
         
         # Points
         indicator_colours = [COLOURS_HEX['purple'], COLOURS_HEX['cyan'],
@@ -206,9 +206,9 @@ class ReportGenerator:
         
         for angle, pre_val, post_val, colour in zip(angles, pre_values, post_values, indicator_colours):
             # PRE point (smaller, grey)
-            ax.scatter(angle, pre_val, color='#999999', s=60, zorder=4, edgecolors='white', linewidths=1)
+            ax.scatter(angle, pre_val, color='#999999', s=80, zorder=4, edgecolors='white', linewidths=1)
             # POST point (larger, coloured)
-            ax.scatter(angle, post_val, color=colour, s=120, zorder=5, edgecolors='white', linewidths=2)
+            ax.scatter(angle, post_val, color=colour, s=200, zorder=5, edgecolors='white', linewidths=2)
         
         ax.set_xticks(angles)
         ax.set_xticklabels([])
@@ -463,45 +463,79 @@ class ReportGenerator:
         # Add logo header
         self._add_logo_header(doc)
         
-        # Title
+        # ===== COVER PAGE =====
+        # Add vertical spacing to centre content
+        for _ in range(6):
+            doc.add_paragraph()
+        
+        # Programme title
         title = doc.add_paragraph()
+        title.alignment = WD_ALIGN_PARAGRAPH.CENTER
         run = title.add_run("THE READINESS FRAMEWORK")
         run.bold = True
-        run.font.size = Pt(14)
+        run.font.size = Pt(28)
         run.font.color.rgb = COLOURS_RGB['purple']
         run.font.name = 'Arial'
         
+        # Report type
         subtitle = doc.add_paragraph()
+        subtitle.alignment = WD_ALIGN_PARAGRAPH.CENTER
         run = subtitle.add_run("Readiness Baseline")
-        run.font.size = Pt(12)
+        run.font.size = Pt(18)
         run.font.color.rgb = COLOURS_RGB['magenta']
         run.font.name = 'Arial'
         
-        # Participant info table
-        info_table = doc.add_table(rows=4, cols=2)
-        info_table.style = 'Table Grid'
-        info_data = [
-            ("Participant:", participant['name']),
-            ("Role:", participant.get('role', 'Not specified')),
-            ("Cohort:", cohort['name']),
-            ("Assessment Date:", pre_date)
-        ]
-        for i, (label, value) in enumerate(info_data):
-            info_table.rows[i].cells[0].text = label
-            info_table.rows[i].cells[1].text = value
-            self._set_cell_shading(info_table.rows[i].cells[0], 'F5F5F5')
-            self._set_cell_margins(info_table.rows[i].cells[0])
-            self._set_cell_margins(info_table.rows[i].cells[1])
-            for cell in info_table.rows[i].cells:
-                for para in cell.paragraphs:
-                    for run in para.runs:
-                        run.font.size = Pt(10)
-                        run.font.name = 'Arial'
-                        if cell == info_table.rows[i].cells[0]:
-                            run.bold = True
-        
-        # Introduction
+        # Decorative line
         doc.add_paragraph()
+        line = doc.add_paragraph()
+        line.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run = line.add_run("━" * 40)
+        run.font.color.rgb = COLOURS_RGB['purple']
+        run.font.size = Pt(10)
+        
+        doc.add_paragraph()
+        
+        # Participant name - large and centred
+        name_para = doc.add_paragraph()
+        name_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run = name_para.add_run(participant['name'])
+        run.bold = True
+        run.font.size = Pt(22)
+        run.font.color.rgb = COLOURS_RGB['dark_grey']
+        run.font.name = 'Arial'
+        
+        # Role
+        role_para = doc.add_paragraph()
+        role_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run = role_para.add_run(participant.get('role', ''))
+        run.font.size = Pt(14)
+        run.font.color.rgb = COLOURS_RGB['mid_grey']
+        run.font.name = 'Arial'
+        
+        doc.add_paragraph()
+        
+        # Cohort and date
+        details_para = doc.add_paragraph()
+        details_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run = details_para.add_run(f"{cohort['name']}  |  {pre_date}")
+        run.font.size = Pt(11)
+        run.font.color.rgb = COLOURS_RGB['mid_grey']
+        run.font.name = 'Arial'
+        
+        # Confidentiality note at bottom
+        for _ in range(4):
+            doc.add_paragraph()
+        conf_para = doc.add_paragraph()
+        conf_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run = conf_para.add_run("CONFIDENTIAL")
+        run.font.size = Pt(9)
+        run.font.color.rgb = COLOURS_RGB['mid_grey']
+        run.font.name = 'Arial'
+        run.bold = True
+        
+        # ===== PAGE 2: YOUR STARTING POINT =====
+        doc.add_page_break()
+        
         heading = doc.add_paragraph()
         run = heading.add_run("Your Starting Point")
         run.bold = True
@@ -512,6 +546,12 @@ class ReportGenerator:
         intro.add_run(f"Welcome to the Launch Readiness programme, {participant['name'].split()[0]}. "
                       f"This report captures your self-assessment before the programme begins. "
                       f"There are no right or wrong answers; this is simply a snapshot of where you see yourself today.")
+        
+        doc.add_paragraph()
+        intro2 = doc.add_paragraph()
+        intro2.add_run("The assessment measures your readiness across four key indicators, each containing "
+                       "statements about different aspects of your role. Your responses are summarised "
+                       "in the radar chart below, followed by a detailed breakdown of each indicator.")
         
         # Radar chart heading
         doc.add_paragraph()
@@ -537,34 +577,47 @@ class ReportGenerator:
         run.font.size = Pt(8)
         run.font.color.rgb = COLOURS_RGB['mid_grey']
         
-        # Summary table
+        # Summary table with explicit widths
         doc.add_paragraph()
-        summary_table = self._create_styled_table(doc, ["Indicator", "Score"])
+        summary_col_widths = [5760, 2880]  # 4", 2" - matching proportions
+        summary_table = self._create_styled_table(doc, ["Indicator", "Score"],
+                                                   col_widths=summary_col_widths)
         
         for i, (ind, score) in enumerate(indicator_scores.items()):
             self._add_table_row(summary_table, [ind, f"{score:.1f}"], i,
-                               [WD_ALIGN_PARAGRAPH.LEFT, WD_ALIGN_PARAGRAPH.CENTER])
+                               [WD_ALIGN_PARAGRAPH.LEFT, WD_ALIGN_PARAGRAPH.CENTER],
+                               col_widths=summary_col_widths)
         
-        # Overall row
+        # Overall row - centred score
         overall_row = summary_table.add_row()
         overall_row.cells[0].text = "OVERALL"
         overall_row.cells[1].text = f"{overall_score:.1f}"
-        for cell in overall_row.cells:
+        for j, cell in enumerate(overall_row.cells):
             self._set_cell_shading(cell, 'F5F5F5')
             self._set_cell_margins(cell)
+            # Set width
+            if j < len(summary_col_widths):
+                cell.width = summary_col_widths[j]
+                tc = cell._tc
+                tcPr = tc.get_or_add_tcPr()
+                tcW = OxmlElement('w:tcW')
+                tcW.set(qn('w:w'), str(summary_col_widths[j]))
+                tcW.set(qn('w:type'), 'dxa')
+                tcPr.append(tcW)
             for para in cell.paragraphs:
-                para.alignment = WD_ALIGN_PARAGRAPH.CENTER if cell == overall_row.cells[1] else WD_ALIGN_PARAGRAPH.LEFT
+                para.alignment = WD_ALIGN_PARAGRAPH.CENTER if j == 1 else WD_ALIGN_PARAGRAPH.LEFT
                 for run in para.runs:
                     run.bold = True
                     run.font.size = Pt(9)
-        
-        # Page break before detailed scores
-        doc.add_page_break()
+                    run.font.name = 'Arial'
         
         # Detailed scores by indicator with bar charts
         for indicator, (start, end) in INDICATORS.items():
             colour_name = INDICATOR_COLOUR_MAP.get(indicator, 'purple')
             colour_hex = COLOURS_HEX[colour_name]
+            
+            # Page break before each indicator to prevent table splitting
+            doc.add_page_break()
             
             # Indicator heading
             heading = doc.add_paragraph()
