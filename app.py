@@ -410,13 +410,16 @@ def show_participant_management():
         st.divider()
     else:
         with st.expander("📧 Email Setup (not configured)"):
-            st.info("To enable email sending, add SendGrid credentials to your Streamlit secrets:")
-            st.code("""[sendgrid]
-api_key = "SG.your-api-key-here"
-sender_email = "readiness@yourdomain.com"
+            st.info("To enable email sending, add your Microsoft 365 credentials to Streamlit secrets:")
+            st.code("""[email]
+smtp_server = "smtp.office365.com"
+smtp_port = 587
+username = "you@thedevelopmentcatalyst.co.uk"
+password = "your-app-password-here"
+sender_email = "you@thedevelopmentcatalyst.co.uk"
 sender_name = "The Development Catalyst"
 """, language="toml")
-            st.caption("Sign up for a free SendGrid account at sendgrid.com (100 emails/day free)")
+            st.caption("You'll need to generate an App Password in your Microsoft account security settings (account.microsoft.com → Security → App passwords).")
         st.divider()
     
     for p in participants:
