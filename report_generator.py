@@ -121,7 +121,7 @@ class ReportGenerator:
                 ha, va = 'center', 'top'
             else:  # Left
                 ha, va = 'right', 'center'
-            ax.text(angle, label_distance, ind, ha=ha, va=va, fontsize=12, fontweight='bold', color=colour)
+            ax.text(angle, label_distance, ind, ha=ha, va=va, fontsize=18, fontweight='bold', color=colour)
         
         ax.spines['polar'].set_visible(False)
         
@@ -185,7 +185,7 @@ class ReportGenerator:
                 ha, va = 'center', 'top'
             else:  # Left
                 ha, va = 'right', 'center'
-            ax.text(angle, label_distance, ind, ha=ha, va=va, fontsize=12, fontweight='bold', color=colour)
+            ax.text(angle, label_distance, ind, ha=ha, va=va, fontsize=18, fontweight='bold', color=colour)
         
         # Legend
         from matplotlib.lines import Line2D
