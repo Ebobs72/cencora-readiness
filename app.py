@@ -6,6 +6,7 @@ Main Streamlit application with admin interface for managing cohorts,
 participants, and generating reports.
 """
 
+import io
 import streamlit as st
 from datetime import datetime
 
@@ -337,6 +338,7 @@ def show_report_generation():
     
     # Import report generator here to avoid circular imports
     from report_generator import ReportGenerator
+    import zipfile
     
     report_gen = ReportGenerator(db)
     
@@ -378,7 +380,10 @@ def show_report_generation():
         selected_name = st.selectbox("Select Participant", options=list(participant_options.keys()))
         selected_id = participant_options[selected_name]
         
-        if st.button("Generate Baseline Report", type="primary"):
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if st.button("Generate Baseline Report", type="primary"):
                 with st.spinner("Generating report..."):
                     doc_buffer = report_gen.generate_baseline_report(selected_id)
                     st.download_button(
@@ -388,6 +393,36 @@ def show_report_generation():
                         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                     )
                     st.success("Report generated successfully!")
+        
+        with col2:
+            if len(eligible) > 1:
+                if st.button(f"📦 Download All Baselines ({len(eligible)} reports)"):
+                    zip_buffer = io.BytesIO()
+                    progress_bar = st.progress(0, text="Generating reports...")
+                    generated = 0
+                    
+                    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+                        for i, p in enumerate(eligible):
+                            try:
+                                doc_buffer = report_gen.generate_baseline_report(p['id'])
+                                filename = f"Readiness_Baseline_{p['name'].replace(' ', '_')}.docx"
+                                zf.writestr(filename, doc_buffer.getvalue())
+                                generated += 1
+                            except Exception as e:
+                                st.warning(f"Skipped {p['name']}: {e}")
+                            progress_bar.progress((i + 1) / len(eligible),
+                                                  text=f"Generated {i + 1} of {len(eligible)}...")
+                    
+                    progress_bar.empty()
+                    zip_buffer.seek(0)
+                    cohort = db.get_cohort(selected_cohort_id)
+                    st.download_button(
+                        label=f"📥 Download ZIP ({generated} reports)",
+                        data=zip_buffer,
+                        file_name=f"Baseline_Reports_{cohort['name'].replace(' ', '_')}.zip",
+                        mime="application/zip"
+                    )
+                    st.success(f"Generated {generated} Baseline reports!")
     
     elif report_type == "Individual Progress (PRE vs POST)":
         st.subheader("Generate Progress Report")
@@ -403,19 +438,52 @@ def show_report_generation():
         selected_name = st.selectbox("Select Participant", options=list(participant_options.keys()))
         selected_id = participant_options[selected_name]
         
-        if st.button("Generate Progress Report", type="primary"):
-            with st.spinner("Generating report..."):
-                try:
-                    doc_buffer = report_gen.generate_progress_report(selected_id, selected_cohort_id)
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if st.button("Generate Progress Report", type="primary"):
+                with st.spinner("Generating report..."):
+                    try:
+                        doc_buffer = report_gen.generate_progress_report(selected_id, selected_cohort_id)
+                        st.download_button(
+                            label="📥 Download Progress Report",
+                            data=doc_buffer,
+                            file_name=f"Readiness_Progress_{selected_name.replace(' ', '_')}.docx",
+                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                        )
+                        st.success("Report generated successfully!")
+                    except Exception as e:
+                        st.error(f"Error generating report: {e}")
+        
+        with col2:
+            if len(eligible) > 1:
+                if st.button(f"📦 Download All Progress ({len(eligible)} reports)"):
+                    zip_buffer = io.BytesIO()
+                    progress_bar = st.progress(0, text="Generating reports...")
+                    generated = 0
+                    
+                    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+                        for i, p in enumerate(eligible):
+                            try:
+                                doc_buffer = report_gen.generate_progress_report(p['id'], selected_cohort_id)
+                                filename = f"Readiness_Progress_{p['name'].replace(' ', '_')}.docx"
+                                zf.writestr(filename, doc_buffer.getvalue())
+                                generated += 1
+                            except Exception as e:
+                                st.warning(f"Skipped {p['name']}: {e}")
+                            progress_bar.progress((i + 1) / len(eligible),
+                                                  text=f"Generated {i + 1} of {len(eligible)}...")
+                    
+                    progress_bar.empty()
+                    zip_buffer.seek(0)
+                    cohort = db.get_cohort(selected_cohort_id)
                     st.download_button(
-                        label="📥 Download Progress Report",
-                        data=doc_buffer,
-                        file_name=f"Readiness_Progress_{selected_name.replace(' ', '_')}.docx",
-                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                        label=f"📥 Download ZIP ({generated} reports)",
+                        data=zip_buffer,
+                        file_name=f"Progress_Reports_{cohort['name'].replace(' ', '_')}.zip",
+                        mime="application/zip"
                     )
-                    st.success("Report generated successfully!")
-                except Exception as e:
-                    st.error(f"Error generating report: {e}")
+                    st.success(f"Generated {generated} Progress reports!")
     
     else:  # Cohort Impact Summary
         st.subheader("Generate Cohort Impact Report")
