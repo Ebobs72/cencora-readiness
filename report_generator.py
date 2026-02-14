@@ -489,7 +489,7 @@ class ReportGenerator:
         doc.add_paragraph()
         line = doc.add_paragraph()
         line.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run = line.add_run("━" * 40)
+        run = line.add_run("\u2501" * 40)
         run.font.color.rgb = COLOURS_RGB['purple']
         run.font.size = Pt(10)
         
@@ -817,7 +817,7 @@ class ReportGenerator:
         doc.add_paragraph()
         line = doc.add_paragraph()
         line.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run = line.add_run("━" * 40)
+        run = line.add_run("\u2501" * 40)
         run.font.color.rgb = COLOURS_RGB['purple']
         run.font.size = Pt(10)
         
@@ -937,10 +937,9 @@ class ReportGenerator:
         run.font.size = Pt(8)
         run.font.color.rgb = COLOURS_RGB['mid_grey']
         
-        # Page break
-        doc.add_page_break()
+        # ===== DETAILED COMPARISON BY INDICATOR =====
+        # (Each indicator gets its own page)
         
-        # Detailed comparison by indicator
         for indicator, (start, end) in INDICATORS.items():
             colour_name = INDICATOR_COLOUR_MAP.get(indicator, 'purple')
             colour_hex = COLOURS_HEX[colour_name]
@@ -948,6 +947,9 @@ class ReportGenerator:
             pre_avg = pre_indicator_scores.get(indicator, 0)
             post_avg = post_indicator_scores.get(indicator, 0)
             change = post_avg - pre_avg
+            
+            # Page break before each indicator to prevent table splitting
+            doc.add_page_break()
             
             heading = doc.add_paragraph()
             run = heading.add_run(indicator)
@@ -995,7 +997,25 @@ class ReportGenerator:
                         col_widths=COL_WIDTHS_7
                     )
             
+            # Reflection prompt after each indicator table
             doc.add_paragraph()
+            reflect_table = doc.add_table(rows=1, cols=1)
+            reflect_table.style = 'Table Grid'
+            reflect_cell = reflect_table.rows[0].cells[0]
+            self._set_cell_shading(reflect_cell, 'F5F5F5')
+            self._set_cell_margins(reflect_cell, 100, 100, 150, 150)
+            para = reflect_cell.paragraphs[0]
+            run = para.add_run("Reflect: ")
+            run.bold = True
+            run.font.size = Pt(9)
+            run.font.color.rgb = COLOURS_RGB['purple']
+            run.font.name = 'Arial'
+            run = para.add_run("Looking at the changes above, what has shifted most for you in this area? "
+                              "What will you continue to develop?")
+            run.italic = True
+            run.font.size = Pt(9)
+            run.font.color.rgb = COLOURS_RGB['mid_grey']
+            run.font.name = 'Arial'
         
         # Page break before reflections
         doc.add_page_break()
