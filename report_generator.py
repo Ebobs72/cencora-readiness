@@ -41,7 +41,7 @@ COLOURS_HEX = {
     'light_grey': '#F5F5F5',
     'cream': '#FDF6E3',
     'light_green': '#E8F5E9',
-    'success_green': '#2E7D32',
+    'success_green': '#007F50',
     'white': '#FFFFFF'
 }
 COLOURS_RGB = {
@@ -55,7 +55,7 @@ COLOURS_RGB = {
     'light_grey': RGBColor(0xF5, 0xF5, 0xF5),
     'cream': RGBColor(0xFD, 0xF6, 0xE3),
     'light_green': RGBColor(0xE8, 0xF5, 0xE9),
-    'success_green': RGBColor(0x2E, 0x7D, 0x32),
+    'success_green': RGBColor(0x00, 0x7F, 0x50),
     'white': RGBColor(0xFF, 0xFF, 0xFF)
 }
 INDICATOR_COLOUR_MAP = {
@@ -983,7 +983,7 @@ class ReportGenerator:
         
         growth_table = self._create_styled_table(
             doc, ["#", "Statement", "Pre", "Post", "Change"],
-            '2E7D32'  # success_green
+            '007F50'  # Cencora dark green
         )
         growth_col_widths = [432, 5760, 864, 864, 1080]
         # Apply widths to header
