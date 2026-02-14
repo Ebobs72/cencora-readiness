@@ -149,7 +149,7 @@ class ReportGenerator:
         for i, (ind, colour) in enumerate(zip(indicators, indicator_colours)):
             ha, va = alignments[i]
             ax.text(angles[i], label_distance, ind, ha=ha, va=va,
-                    fontsize=12, fontweight='bold', color=colour)
+                    fontsize=18, fontweight='bold', color=colour)
         
         ax.spines['polar'].set_visible(False)
         
@@ -218,7 +218,7 @@ class ReportGenerator:
         for i, (ind, colour) in enumerate(zip(indicators, indicator_colours)):
             ha, va = alignments[i]
             ax.text(angles[i], label_distance, ind, ha=ha, va=va,
-                    fontsize=12, fontweight='bold', color=colour)
+                    fontsize=18, fontweight='bold', color=colour)
         
         # Legend
         from matplotlib.lines import Line2D
