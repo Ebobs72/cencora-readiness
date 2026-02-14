@@ -127,8 +127,8 @@ class ReportGenerator:
         ax.set_yticks([1, 2, 3, 4, 5, 6])
         ax.set_yticklabels(['1', '2', '3', '4', '5', '6'], fontsize=9, color='#999999')
         ax.set_rlabel_position(45)
-        ax.yaxis.grid(True, color='#E0E0E0', linewidth=0.8)
-        ax.xaxis.grid(True, color='#E0E0E0', linewidth=0.8)
+        ax.yaxis.grid(True, color='#999999', linewidth=1.2, alpha=0.9)
+        ax.xaxis.grid(True, color='#999999', linewidth=1.2, alpha=0.9)
         
         # Draw the data polygon
         ax.fill(angles_closed, values_closed, color=COLOURS_HEX['purple'], alpha=0.15)
@@ -189,8 +189,8 @@ class ReportGenerator:
         ax.set_yticks([1, 2, 3, 4, 5, 6])
         ax.set_yticklabels(['1', '2', '3', '4', '5', '6'], fontsize=9, color='#999999')
         ax.set_rlabel_position(45)
-        ax.yaxis.grid(True, color='#E0E0E0', linewidth=0.8)
-        ax.xaxis.grid(True, color='#E0E0E0', linewidth=0.8)
+        ax.yaxis.grid(True, color='#999999', linewidth=1.2, alpha=0.9)
+        ax.xaxis.grid(True, color='#999999', linewidth=1.2, alpha=0.9)
         
         # PRE polygon (dashed, grey)
         ax.fill(angles_closed, pre_closed, color='#999999', alpha=0.1)
@@ -517,7 +517,13 @@ class ReportGenerator:
         # Cohort and date
         details_para = doc.add_paragraph()
         details_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run = details_para.add_run(f"{cohort['name']}  |  {pre_date}")
+        run = details_para.add_run(f"{cohort['name']}  |  Assessment: {pre_date}")
+        gen_para = doc.add_paragraph()
+        gen_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run = gen_para.add_run(f"Report generated: {datetime.now().strftime('%d %B %Y')}")
+        run.font.size = Pt(10)
+        run.font.color.rgb = COLOURS_RGB['mid_grey']
+        run.font.name = 'Arial'
         run.font.size = Pt(11)
         run.font.color.rgb = COLOURS_RGB['mid_grey']
         run.font.name = 'Arial'
