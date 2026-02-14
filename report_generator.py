@@ -1115,12 +1115,18 @@ class ReportGenerator:
             doc.add_paragraph()
             reflect_table = doc.add_table(rows=1, cols=1)
             reflect_table.style = 'Table Grid'
+            reflect_table.alignment = WD_TABLE_ALIGNMENT.LEFT
             # Match width to the indicator table above (9000 twips)
             tbl = reflect_table._tbl
             tblPr = tbl.tblPr if tbl.tblPr is not None else OxmlElement('w:tblPr')
             tblLayout = OxmlElement('w:tblLayout')
             tblLayout.set(qn('w:type'), 'fixed')
             tblPr.append(tblLayout)
+            # Remove any default indent
+            tblInd = OxmlElement('w:tblInd')
+            tblInd.set(qn('w:w'), '0')
+            tblInd.set(qn('w:type'), 'dxa')
+            tblPr.append(tblInd)
             reflect_cell = reflect_table.rows[0].cells[0]
             reflect_cell.width = 9000
             tc = reflect_cell._tc
@@ -1130,7 +1136,7 @@ class ReportGenerator:
             tcW.set(qn('w:type'), 'dxa')
             tcPr.append(tcW)
             self._set_cell_shading(reflect_cell, 'F5F5F5')
-            self._set_cell_margins(reflect_cell, 100, 100, 150, 150)
+            self._set_cell_margins(reflect_cell, 100, 100, 100, 100)
             para = reflect_cell.paragraphs[0]
             run = para.add_run("Reflect: ")
             run.bold = True
