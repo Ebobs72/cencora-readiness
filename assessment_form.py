@@ -172,7 +172,7 @@ def show_assessment(db, token: str):
             for item_num in range(start, end + 1):
                 item = ITEMS[item_num]
                 
-                st.markdown(f'<div class="item-box"><strong>{item_num}.</strong> {item["text"]}</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="item-box" style="border-left-color: {colour};"><strong>{item_num}.</strong> {item["text"]}</div>', unsafe_allow_html=True)
                 
                 ratings[item_num] = st.radio(
                     f"Rating for item {item_num}",
