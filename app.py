@@ -84,6 +84,33 @@ def main():
 def show_admin_interface():
     """Display the admin interface."""
     
+    # Admin authentication
+    if 'admin_authenticated' not in st.session_state:
+        st.session_state.admin_authenticated = False
+    
+    if not st.session_state.admin_authenticated:
+        st.markdown('<p class="main-header">🚀 Launch Readiness</p>', unsafe_allow_html=True)
+        st.markdown('<p class="sub-header">Assessment Administration</p>', unsafe_allow_html=True)
+        
+        # Get admin code from secrets, with fallback
+        try:
+            admin_code = st.secrets.get("app", {}).get("admin_code", "readiness2025")
+        except:
+            admin_code = "readiness2025"
+        
+        with st.form("admin_login"):
+            st.write("Please enter the admin access code to continue.")
+            code = st.text_input("Access code", type="password")
+            submitted = st.form_submit_button("Log In", type="primary")
+            
+            if submitted:
+                if code == admin_code:
+                    st.session_state.admin_authenticated = True
+                    st.rerun()
+                else:
+                    st.error("Incorrect access code.")
+        return
+    
     st.markdown('<p class="main-header">🚀 Launch Readiness</p>', unsafe_allow_html=True)
     st.markdown('<p class="sub-header">Assessment Administration</p>', unsafe_allow_html=True)
     
