@@ -133,10 +133,6 @@ def show_assessment(db, token: str):
     
     st.divider()
     
-    # Initialize session state for tracking review
-    if 'reviewed_low_scores' not in st.session_state:
-        st.session_state.reviewed_low_scores = False
-    
     # Assessment form
     with st.form("assessment_form"):
         ratings = {}
@@ -171,14 +167,14 @@ def show_assessment(db, token: str):
                 
                 st.markdown(f"**{item_num}.** {item['text']}")
                 
-                # Slider starting at 1, with scale labels
-                ratings[item_num] = st.select_slider(
+                ratings[item_num] = st.radio(
                     f"Rating for item {item_num}",
                     options=[1, 2, 3, 4, 5, 6],
-                    value=1,  # Start at left edge
-                    format_func=lambda x: f"{x}",
+                    format_func=lambda x: {1: "1 – Strongly Disagree", 2: "2 – Disagree", 3: "3 – Slightly Disagree", 4: "4 – Slightly Agree", 5: "5 – Agree", 6: "6 – Strongly Agree"}[x],
+                    index=None,
                     key=f"rating_{item_num}",
-                    label_visibility="collapsed"
+                    label_visibility="collapsed",
+                    horizontal=True
                 )
                 
                 st.write("")  # Spacing between questions
@@ -194,13 +190,14 @@ def show_assessment(db, token: str):
         for item_num in [31, 32]:
             item = ITEMS[item_num]
             st.markdown(f"**{item_num}.** {item['text']}")
-            ratings[item_num] = st.select_slider(
+            ratings[item_num] = st.radio(
                 f"Rating for item {item_num}",
                 options=[1, 2, 3, 4, 5, 6],
-                value=1,  # Start at left edge
-                format_func=lambda x: f"{x}",
+                format_func=lambda x: {1: "1 – Strongly Disagree", 2: "2 – Disagree", 3: "3 – Slightly Disagree", 4: "4 – Slightly Agree", 5: "5 – Agree", 6: "6 – Strongly Agree"}[x],
+                index=None,
                 key=f"rating_{item_num}",
-                label_visibility="collapsed"
+                label_visibility="collapsed",
+                horizontal=True
             )
             st.write("")
         
@@ -240,27 +237,22 @@ def show_assessment(db, token: str):
         submitted = st.form_submit_button("Submit Assessment", type="primary", use_container_width=True)
         
         if submitted:
-            # Check for ratings still at 1 (potentially unchanged)
-            unchanged_items = [num for num, score in ratings.items() if score == 1]
+            # Check for unanswered items (None = no selection made)
+            unanswered_items = [num for num, score in ratings.items() if score is None]
             
-            if unchanged_items and not st.session_state.reviewed_low_scores:
-                # Set the flag — they must submit AGAIN to confirm
-                st.session_state.reviewed_low_scores = True
-                
+            if unanswered_items:
                 item_list = ""
-                for num in unchanged_items:
+                for num in unanswered_items:
                     item_list += f"  - **Item {num}:** {ITEMS[num]['text']}\n"
                 
-                st.warning(f"""
-⚠️ **Please review before submitting**
+                st.error(f"""
+⚠️ **Please complete all items before submitting**
 
-You have **{len(unchanged_items)}** item{'s' if len(unchanged_items) > 1 else ''} rated as **1 — Strongly Disagree**:
+You have **{len(unanswered_items)}** unanswered item{'s' if len(unanswered_items) > 1 else ''}:
 
 {item_list}
 
-If these are correct, **click Submit Assessment again** to confirm.
-
-If you meant to rate them differently, adjust your responses above first.
+Please scroll up and select a rating for each one.
                 """)
             else:
                 # Save ratings
@@ -271,9 +263,6 @@ If you meant to rate them differently, adjust your responses above first.
                 
                 # Mark as completed
                 db.mark_assessment_completed(token)
-                
-                # Clear the review flag
-                st.session_state.reviewed_low_scores = False
                 
                 st.success("Thank you! Your assessment has been submitted successfully.")
                 st.balloons()
