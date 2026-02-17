@@ -86,6 +86,13 @@ def show_assessment(db, token: str):
             line-height: 1.4;
             margin-bottom: 0.5rem;
         }
+        .item-box {
+            background-color: #F5F5F5;
+            padding: 0.75rem 1rem;
+            border-radius: 6px;
+            border-left: 3px solid #461E96;
+            margin-bottom: 0.25rem;
+        }
         .warning-box {
             background-color: #FFF3CD;
             border: 1px solid #FFCC00;
@@ -165,7 +172,7 @@ def show_assessment(db, token: str):
             for item_num in range(start, end + 1):
                 item = ITEMS[item_num]
                 
-                st.markdown(f"**{item_num}.** {item['text']}")
+                st.markdown(f'<div class="item-box"><strong>{item_num}.</strong> {item["text"]}</div>', unsafe_allow_html=True)
                 
                 ratings[item_num] = st.radio(
                     f"Rating for item {item_num}",
@@ -189,7 +196,7 @@ def show_assessment(db, token: str):
         
         for item_num in [31, 32]:
             item = ITEMS[item_num]
-            st.markdown(f"**{item_num}.** {item['text']}")
+            st.markdown(f'<div class="item-box"><strong>{item_num}.</strong> {item["text"]}</div>', unsafe_allow_html=True)
             ratings[item_num] = st.radio(
                 f"Rating for item {item_num}",
                 options=[1, 2, 3, 4, 5, 6],
