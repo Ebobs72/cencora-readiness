@@ -138,6 +138,25 @@ def show_assessment(db, token: str):
     
     st.markdown(welcome_html, unsafe_allow_html=True)
     
+    # Privacy notice
+    with st.expander("🔒 Privacy & Data Protection"):
+        st.markdown("""
+Your responses to this assessment are **confidential**. They will be used to generate 
+a personal development report for you and an anonymised cohort summary for your organisation.
+
+Your name and email address are used solely to send you assessment links and personalise your report. 
+**Your individual ratings and written responses are not shared with your employer in identifiable form.**
+
+Anonymised, aggregated response data may be analysed using AI tools to identify common themes 
+across the cohort. No individual responses are attributed to named participants in cohort reports.
+
+Your data is stored securely in an encrypted EU-based database and will be retained for the 
+duration of the programme plus 12 months, after which it will be permanently deleted.
+
+You have the right to access, correct, or request deletion of your data at any time. 
+To exercise these rights, please contact your programme facilitator.
+        """)
+    
     st.divider()
     
     # Assessment form
