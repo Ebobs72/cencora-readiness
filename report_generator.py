@@ -28,7 +28,7 @@ from framework import (
     ITEMS, OPEN_QUESTIONS_PRE, OPEN_QUESTIONS_POST, RATING_SCALE,
     FOCUS_TAGS, get_items_for_indicator, get_items_by_focus
 )
-from theme_extractor import ThemeExtractor, format_themes_for_report
+from theme_extractor import ThemeExtractor, format_themes_for_report, format_insight_themes
 # Cencora brand colours (hex for matplotlib, RGB for docx)
 COLOURS_HEX = {
     'purple': '#461E96',
@@ -1424,7 +1424,7 @@ class ReportGenerator:
     # =========== IMPACT REPORT ===========
     
     def generate_impact_report(self, cohort_id: int) -> io.BytesIO:
-        """Generate an Impact report (cohort summary)."""
+        """Generate an Impact report (cohort summary) with integrated AI insights."""
         
         # Get cohort data
         cohort_data = self.db.get_cohort_data(cohort_id)
@@ -1438,6 +1438,8 @@ class ReportGenerator:
         
         if len(complete_participants) < 2:
             raise ValueError("Need at least 2 participants with complete data")
+        
+        n_complete = len(complete_participants)
         
         # Calculate cohort averages
         pre_avgs = self.db.get_cohort_averages(cohort_id, 'PRE')
@@ -1462,14 +1464,91 @@ class ReportGenerator:
             pre_focus[focus] = sum(pre_avgs.get(i, {}).get('avg', 0) for i in items) / len(items) if items else 0
             post_focus[focus] = sum(post_avgs.get(i, {}).get('avg', 0) for i in items) / len(items) if items else 0
         
-        # Get qualitative themes
+        # ===== DYNAMIC METRICS CALCULATION =====
+        
+        # Calculate % of participants who improved overall
+        improved_count = 0
+        for p in complete_participants:
+            pre_ratings = p['pre']['ratings']
+            post_ratings = p['post']['ratings']
+            pre_avg = sum(pre_ratings.get(i, 0) for i in range(1, 33)) / 32
+            post_avg = sum(post_ratings.get(i, 0) for i in range(1, 33)) / 32
+            if post_avg > pre_avg:
+                improved_count += 1
+        pct_improved = (improved_count / n_complete * 100) if n_complete > 0 else 0
+        
+        # Calculate % of post-programme item averages at "Agree" (5) or above
+        agree_count = 0
+        total_items = 0
+        for i in range(1, 33):
+            post_avg = post_avgs.get(i, {}).get('avg', 0)
+            if post_avg > 0:
+                total_items += 1
+                if post_avg >= 5.0:
+                    agree_count += 1
+        pct_agree_or_above = (agree_count / total_items * 100) if total_items > 0 else 0
+        
+        # Calculate item-level changes for top growth and lowest post
+        item_changes = []
+        for item_num in range(1, 33):
+            pre_avg = pre_avgs.get(item_num, {}).get('avg', 0)
+            post_avg = post_avgs.get(item_num, {}).get('avg', 0)
+            item_changes.append({
+                'num': item_num,
+                'text': ITEMS[item_num]['text'],
+                'focus': ITEMS[item_num]['focus'],
+                'pre_avg': pre_avg,
+                'post_avg': post_avg,
+                'change': post_avg - pre_avg
+            })
+        
+        top_growth_items = sorted(item_changes, key=lambda x: x['change'], reverse=True)[:5]
+        lowest_post_items = sorted(item_changes, key=lambda x: x['post_avg'])[:5]
+        
+        completion_rate = int(cohort_data['post_completed'] / len(participants) * 100) if participants else 0
+        
+        # ===== COLLECT OPEN RESPONSES =====
+        
         takeaway_responses = [p['post']['open_responses'].get(1, '') for p in complete_participants if p['post']['open_responses'].get(1)]
         commitment_responses = [p['post']['open_responses'].get(2, '') for p in complete_participants if p['post']['open_responses'].get(2)]
+        concern_pre_responses = [p['pre']['open_responses'].get(3, '') for p in complete_participants if p['pre']['open_responses'].get(3)]
+        concern_post_responses = [p['post']['open_responses'].get(3, '') for p in complete_participants if p['post']['open_responses'].get(3)]
         
-        takeaway_themes = self.theme_extractor.extract_takeaways(takeaway_responses)
-        commitment_themes = self.theme_extractor.extract_commitments(commitment_responses)
+        # ===== INTEGRATED AI INSIGHTS =====
         
-        # Create document
+        # Build the comprehensive score data package
+        score_data = {
+            'n_participants': n_complete,
+            'pre_overall': pre_overall,
+            'post_overall': post_overall,
+            'indicator_scores': [
+                {'name': ind, 'pre': pre_indicator_scores[ind], 'post': post_indicator_scores[ind],
+                 'change': post_indicator_scores[ind] - pre_indicator_scores[ind]}
+                for ind in INDICATORS.keys()
+            ],
+            'focus_scores': [
+                {'name': foc, 'pre': pre_focus[foc], 'post': post_focus[foc],
+                 'change': post_focus[foc] - pre_focus[foc]}
+                for foc in FOCUS_TAGS.keys()
+            ],
+            'top_growth_items': top_growth_items,
+            'lowest_post_items': lowest_post_items,
+            'pct_improved': pct_improved,
+            'pct_agree_or_above': pct_agree_or_above,
+        }
+        
+        open_responses = {
+            'takeaways': takeaway_responses,
+            'commitments': commitment_responses,
+            'concerns_pre': concern_pre_responses,
+            'concerns_post': concern_post_responses,
+        }
+        
+        # Single integrated API call for all insights
+        insights = self.theme_extractor.extract_cohort_insights(score_data, open_responses)
+        
+        # ===== BUILD DOCUMENT =====
+        
         doc = Document()
         style = doc.styles['Normal']
         style.font.name = 'Arial'
@@ -1492,7 +1571,6 @@ class ReportGenerator:
         # Cohort info
         info_table = doc.add_table(rows=4, cols=2)
         info_table.style = 'Table Grid'
-        completion_rate = int(cohort_data['post_completed'] / len(participants) * 100) if participants else 0
         info_data = [
             ("Programme:", cohort.get('programme', 'Launch Readiness')),
             ("Cohort:", cohort['name']),
@@ -1512,7 +1590,7 @@ class ReportGenerator:
                         if cell == info_table.rows[i].cells[0]:
                             run.bold = True
         
-        # Executive Summary
+        # Executive Summary — AI-generated narrative
         doc.add_paragraph()
         heading = doc.add_paragraph()
         run = heading.add_run("Executive Summary")
@@ -1520,13 +1598,22 @@ class ReportGenerator:
         run.font.size = Pt(14)
         run.font.color.rgb = COLOURS_RGB['purple']
         
-        change = post_overall - pre_overall
-        summary = doc.add_paragraph()
-        summary.add_run(f"The Launch Readiness programme delivered measurable improvement across all four "
-                        f"Readiness Indicators. Cohort average scores increased from {pre_overall:.1f} to "
-                        f"{post_overall:.1f} (+{change:.1f} on a 6-point scale).")
+        # Use AI narrative, splitting on double newlines for paragraphs
+        executive_text = insights.get('executive_narrative', '')
+        if executive_text:
+            for para_text in executive_text.split('\n\n'):
+                if para_text.strip():
+                    p = doc.add_paragraph()
+                    p.add_run(para_text.strip())
+        else:
+            change = post_overall - pre_overall
+            p = doc.add_paragraph()
+            p.add_run(f"The Launch Readiness programme delivered measurable improvement across all four "
+                      f"Readiness Indicators. Cohort average scores increased from {pre_overall:.1f} to "
+                      f"{post_overall:.1f} (+{change:.1f} on a 6-point scale).")
         
-        # Key metrics boxes
+        # Key metrics boxes — NOW FULLY DYNAMIC
+        change = post_overall - pre_overall
         doc.add_paragraph()
         metrics_table = doc.add_table(rows=1, cols=4)
         metrics_table.style = 'Table Grid'
@@ -1534,8 +1621,8 @@ class ReportGenerator:
         metrics = [
             (f"+{change:.1f}", "Average Increase", '461E96'),
             (f"{completion_rate}%", "Completion Rate", '00B4E6'),
-            ("100%", "Showed Improvement", 'E6008C'),
-            ("79%", "Now 'Agree' or Above", '00DC8C')
+            (f"{pct_improved:.0f}%", "Showed Improvement", 'E6008C'),
+            (f"{pct_agree_or_above:.0f}%", "Now 'Agree' or Above", '00DC8C')
         ]
         
         for i, (value, label, colour) in enumerate(metrics):
@@ -1615,7 +1702,7 @@ class ReportGenerator:
                                 WD_ALIGN_PARAGRAPH.CENTER, WD_ALIGN_PARAGRAPH.CENTER,
                                 WD_ALIGN_PARAGRAPH.CENTER])
         
-        # Qualitative Themes
+        # Qualitative Themes — from integrated insights
         doc.add_paragraph()
         heading = doc.add_paragraph()
         run = heading.add_run("Qualitative Themes")
@@ -1628,7 +1715,8 @@ class ReportGenerator:
         run.bold = True
         run.font.size = Pt(11)
         
-        themes = format_themes_for_report(takeaway_themes)
+        takeaway_themes = insights.get('takeaway_themes', [])
+        themes = format_insight_themes(takeaway_themes, n_complete)
         if themes:
             for theme in themes:
                 doc.add_paragraph(f"* {theme}")
@@ -1641,14 +1729,15 @@ class ReportGenerator:
         run.bold = True
         run.font.size = Pt(11)
         
-        themes = format_themes_for_report(commitment_themes)
+        commitment_themes = insights.get('commitment_themes', [])
+        themes = format_insight_themes(commitment_themes, n_complete)
         if themes:
             for theme in themes:
                 doc.add_paragraph(f"* {theme}")
         else:
             doc.add_paragraph("Manual review of responses recommended.")
         
-        # ROI Summary
+        # ROI Summary — AI-generated narrative
         doc.add_paragraph()
         heading = doc.add_paragraph()
         run = heading.add_run("ROI Summary")
@@ -1656,30 +1745,41 @@ class ReportGenerator:
         run.font.size = Pt(14)
         run.font.color.rgb = COLOURS_RGB['purple']
         
-        pre_q32 = pre_avgs.get(32, {}).get('avg', 0)
-        post_q32 = post_avgs.get(32, {}).get('avg', 0)
+        roi_text = insights.get('roi_narrative', '')
+        if not roi_text:
+            # Fallback using actual data
+            pre_q32 = pre_avgs.get(32, {}).get('avg', 0)
+            post_q32 = post_avgs.get(32, {}).get('avg', 0)
+            best_focus = max(score_data['focus_scores'], key=lambda x: x['change'])
+            roi_text = (
+                f"Before the programme, the average readiness score was {pre_overall:.1f}. "
+                f"After completing Launch Readiness, this rose to {post_overall:.1f}. "
+                f"{pct_agree_or_above:.0f}% of post-programme item scores now sit at 'Agree' or above. "
+                f"The greatest gains were in {best_focus['name'].lower()} ({best_focus['change']:+.1f})."
+            )
         
         roi_para = doc.add_paragraph()
-        roi_text = (f'"Before the programme, the average confidence in building a high-performing team '
-                    f'was {pre_q32:.1f}. After completing Launch Readiness, this rose to {post_q32:.1f}. '
-                    f'The greatest gains were in Knowledge and practical skills, with participants '
-                    f'particularly valuing the frameworks for feedback and delegation."')
         run = roi_para.add_run(roi_text)
         run.italic = True
         
-        # Recommendations
+        # Recommendations — AI-generated, data-driven
         doc.add_paragraph()
         subheading = doc.add_paragraph()
         run = subheading.add_run("Recommendations")
         run.bold = True
         run.font.size = Pt(11)
         
-        recommendations = [
-            "Reinforce time management - protecting time for important work remains a development area",
-            "Support awareness development - consider follow-up coaching to deepen self-awareness gains",
-            "Leverage the feedback frameworks - ensure line managers support application",
-            "Consider 90-day follow-up - to measure sustained application and identify regression"
-        ]
+        recommendations = insights.get('recommendations', [])
+        if not recommendations:
+            # Fallback
+            weakest = min(score_data['indicator_scores'], key=lambda x: x['post'])
+            recommendations = [
+                f"Reinforce {weakest['name']} — this indicator scored lowest post-programme ({weakest['post']:.1f})",
+                "Ensure line managers support application of new frameworks in the workplace",
+                "Consider 90-day follow-up assessment to measure sustained application",
+                "Share anonymised cohort themes with participants to reinforce collective learning",
+            ]
+        
         for i, rec in enumerate(recommendations, 1):
             doc.add_paragraph(f"{i}. {rec}")
         
