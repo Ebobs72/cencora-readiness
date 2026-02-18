@@ -300,15 +300,17 @@ Post-programme reflections on concerns:
 
 === INSTRUCTIONS ===
 
+CRITICAL: Be concise. Senior stakeholders will skim this. Every sentence must earn its place.
+
 Based on ALL the data above, return ONLY valid JSON (no other text) in this exact format:
 
 {{
-  "executive_narrative": "Maximum 4-5 sentences. Be direct and punchy — lead with the headline result, then the strongest insight, then the one area to watch. Reference specific scores but don't list every indicator. Connect one quantitative pattern to what participants actually said. Write for a time-poor senior stakeholder who wants the story in 30 seconds.",
+  "executive_narrative": "3-4 SHORT sentences maximum. Sentence 1: headline result (overall shift + % improved). Sentence 2: where the biggest impact landed (one indicator or focus area, with score). Sentence 3: the one development gap still to close (lowest area, with score). Sentence 4 (optional): one insight linking scores to what participants said. NO waffle, NO filler phrases like 'comprehensive improvements' or 'substantial return'. Just the facts.",
   
-  "roi_narrative": "One paragraph suitable for an ROI section. Reference specific before/after scores, the focus areas with biggest gains, and what participants said they will do differently. Write as if quoting from a programme evaluation — authoritative but accessible.",
+  "roi_narrative": "2-3 sentences. State the before/after scores. Name the single biggest gain area. State one concrete behavioural commitment participants made. Stop.",
   
   "recommendations": [
-    "4-5 specific, data-driven recommendations. Each should reference actual score patterns or qualitative themes. Format: 'Recommendation title — brief explanation referencing the data'"
+    "3-4 recommendations maximum. Each must be ONE sentence: 'Action — why, referencing a specific score or theme'. No sub-clauses, no elaboration. Keep each under 25 words."
   ],
   
   "takeaway_themes": [
@@ -375,12 +377,9 @@ Based on ALL the data above, return ONLY valid JSON (no other text) in this exac
         )
         
         roi_narrative = (
-            f"Before the programme, the average readiness score was {score_data['pre_overall']:.1f}. "
-            f"After completing Launch Readiness, this rose to {score_data['post_overall']:.1f}. "
-            f"{score_data.get('pct_agree_or_above', 0):.0f}% of post-programme item scores now sit at "
-            f"'Agree' or above. The greatest gains were in {best_focus['name'].lower()} "
-            f"({best_focus['change']:+.1f}), indicating participants developed stronger understanding "
-            f"of practical frameworks and tools."
+            f"Readiness scores rose from {score_data['pre_overall']:.1f} to {score_data['post_overall']:.1f}. "
+            f"The biggest gains were in {best_focus['name'].lower()} ({best_focus['change']:+.1f}). "
+            f"{score_data.get('pct_agree_or_above', 0):.0f}% of post-programme scores now sit at 'Agree' or above."
         )
         
         recommendations = [
