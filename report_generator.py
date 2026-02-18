@@ -1612,17 +1612,27 @@ class ReportGenerator:
                       f"Readiness Indicators. Cohort average scores increased from {pre_overall:.1f} to "
                       f"{post_overall:.1f} (+{change:.1f} on a 6-point scale).")
         
-        # Key metrics boxes — NOW FULLY DYNAMIC
+        # Key metrics boxes — HEADLINE METRICS
         change = post_overall - pre_overall
+        
+        # Calculate readiness gap closed
+        max_score = 6.0
+        gap_before = max_score - pre_overall
+        gap_closed_pct = (change / gap_before * 100) if gap_before > 0 else 0
+        
+        # Find strongest indicator gain
+        strongest_ind = max(score_data['indicator_scores'], key=lambda x: x['change'])
+        strongest_label = f"{strongest_ind['name']}\n+{strongest_ind['change']:.1f}"
+        
         doc.add_paragraph()
         metrics_table = doc.add_table(rows=1, cols=4)
         metrics_table.style = 'Table Grid'
         
         metrics = [
-            (f"+{change:.1f}", "Average Increase", '461E96'),
+            (f"{gap_closed_pct:.0f}%", "Readiness Gap Closed", '461E96'),
             (f"{completion_rate}%", "Completion Rate", '00B4E6'),
             (f"{pct_improved:.0f}%", "Showed Improvement", 'E6008C'),
-            (f"{pct_agree_or_above:.0f}%", "Now 'Agree' or Above", '00DC8C')
+            (strongest_label, "Strongest Indicator", '00DC8C')
         ]
         
         for i, (value, label, colour) in enumerate(metrics):
@@ -1634,7 +1644,7 @@ class ReportGenerator:
             para.alignment = WD_ALIGN_PARAGRAPH.CENTER
             run = para.add_run(value)
             run.bold = True
-            run.font.size = Pt(18)
+            run.font.size = Pt(16)
             run.font.color.rgb = COLOURS_RGB['white']
             
             para2 = cell.add_paragraph()
@@ -1642,6 +1652,73 @@ class ReportGenerator:
             run2 = para2.add_run(label)
             run2.font.size = Pt(8)
             run2.font.color.rgb = COLOURS_RGB['white']
+        
+        # ===== BACK FOCUS AREA SNAPSHOT =====
+        doc.add_paragraph()
+        heading = doc.add_paragraph()
+        run = heading.add_run("Development Focus: BACK Analysis")
+        run.bold = True
+        run.font.size = Pt(12)
+        run.font.color.rgb = COLOURS_RGB['purple']
+        
+        p = doc.add_paragraph()
+        run = p.add_run("How participants shifted across the four dimensions of development:")
+        run.font.size = Pt(9)
+        run.font.color.rgb = COLOURS_RGB['mid_grey']
+        
+        doc.add_paragraph()
+        
+        # BACK colours - distinct from indicator colours
+        back_colours = {
+            'Behaviour': 'E6008C',
+            'Awareness': '461E96',
+            'Confidence': '00B4E6',
+            'Knowledge': '00DC8C',
+        }
+        
+        back_table = doc.add_table(rows=3, cols=4)
+        back_table.style = 'Table Grid'
+        
+        focus_order = ['Behaviour', 'Awareness', 'Confidence', 'Knowledge']
+        
+        for col_idx, focus in enumerate(focus_order):
+            pre = pre_focus.get(focus, 0)
+            post = post_focus.get(focus, 0)
+            foc_change = post - pre
+            colour = back_colours[focus]
+            
+            # Row 0: Focus name (coloured header)
+            cell = back_table.rows[0].cells[col_idx]
+            self._set_cell_shading(cell, colour)
+            self._set_cell_margins(cell, 60, 40, 40, 40)
+            para = cell.paragraphs[0]
+            para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            run = para.add_run(focus)
+            run.bold = True
+            run.font.size = Pt(11)
+            run.font.color.rgb = COLOURS_RGB['white']
+            
+            # Row 1: Pre → Post
+            cell = back_table.rows[1].cells[col_idx]
+            self._set_cell_shading(cell, 'F5F5F5')
+            self._set_cell_margins(cell, 40, 40, 40, 40)
+            para = cell.paragraphs[0]
+            para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            run = para.add_run(f"{pre:.1f}  →  {post:.1f}")
+            run.font.size = Pt(10)
+            
+            # Row 2: Change value (bold, coloured)
+            cell = back_table.rows[2].cells[col_idx]
+            self._set_cell_margins(cell, 40, 60, 40, 40)
+            para = cell.paragraphs[0]
+            para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            change_str = f"+{foc_change:.1f}" if foc_change > 0 else f"{foc_change:.1f}"
+            run = para.add_run(change_str)
+            run.bold = True
+            run.font.size = Pt(14)
+            run.font.color.rgb = RGBColor(
+                int(colour[0:2], 16), int(colour[2:4], 16), int(colour[4:6], 16)
+            )
         
         # Page break
         doc.add_page_break()
