@@ -303,7 +303,7 @@ Post-programme reflections on concerns:
 Based on ALL the data above, return ONLY valid JSON (no other text) in this exact format:
 
 {{
-  "executive_narrative": "2-3 paragraphs synthesising what the data shows. Weave together the quantitative patterns with qualitative themes. Be specific — cite actual scores, changes, and participant language. Write for a senior stakeholder audience. Do not use bullet points — write in flowing prose.",
+  "executive_narrative": "Maximum 4-5 sentences. Be direct and punchy — lead with the headline result, then the strongest insight, then the one area to watch. Reference specific scores but don't list every indicator. Connect one quantitative pattern to what participants actually said. Write for a time-poor senior stakeholder who wants the story in 30 seconds.",
   
   "roi_narrative": "One paragraph suitable for an ROI section. Reference specific before/after scores, the focus areas with biggest gains, and what participants said they will do differently. Write as if quoting from a programme evaluation — authoritative but accessible.",
   
@@ -366,16 +366,12 @@ Based on ALL the data above, return ONLY valid JSON (no other text) in this exac
         best_focus = max(score_data['focus_scores'], key=lambda x: x['change'])
         
         executive_narrative = (
-            f"The Launch Readiness programme delivered measurable improvement across all four "
-            f"Readiness Indicators. Cohort average scores increased from {score_data['pre_overall']:.1f} to "
-            f"{score_data['post_overall']:.1f} (+{change:.1f} on a 6-point scale), with "
-            f"{score_data.get('pct_improved', 0):.0f}% of participants showing overall improvement.\n\n"
-            f"The strongest gains were in {best_ind['name']} ({best_ind['change']:+.1f}), while "
-            f"{weakest_ind['name']} ({weakest_ind['post']:.1f} post-programme) represents the area "
-            f"with greatest room for continued development. "
-            f"By focus area, {best_focus['name']} showed the largest shift ({best_focus['change']:+.1f}), "
-            f"suggesting the programme had strongest impact on participants' "
-            f"{best_focus['name'].lower()} of leadership concepts and tools."
+            f"Cohort scores rose from {score_data['pre_overall']:.1f} to "
+            f"{score_data['post_overall']:.1f} (+{change:.1f}), with "
+            f"{score_data.get('pct_improved', 0):.0f}% of participants improving overall. "
+            f"Strongest gains came in {best_ind['name']} ({best_ind['change']:+.1f}). "
+            f"{weakest_ind['name']} ({weakest_ind['post']:.1f} post-programme) remains the "
+            f"key area for continued development."
         )
         
         roi_narrative = (
